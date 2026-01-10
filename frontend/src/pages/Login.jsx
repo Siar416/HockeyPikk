@@ -1,4 +1,4 @@
-export default function Login({ onSubmit, onSwitch, onGuest }) {
+export default function Login({ onSubmit, onSwitch, onGuest, error }) {
   return (
     <section className="glass-card rounded-3xl p-6">
       <div className="flex items-center gap-3">
@@ -79,7 +79,14 @@ export default function Login({ onSubmit, onSwitch, onGuest }) {
             Continue as Guest
           </button>
         </div>
-        {/* TODO: show Supabase auth errors inline */}
+        {error ? (
+          <p
+            role="alert"
+            className="rounded-2xl border border-[rgba(244,68,79,0.3)] bg-[rgba(244,68,79,0.1)] px-3 py-2 text-xs text-[color:var(--accent)]"
+          >
+            {error}
+          </p>
+        ) : null}
       </form>
 
       <div className="pt-4 text-center text-xs text-[color:var(--muted)]">
