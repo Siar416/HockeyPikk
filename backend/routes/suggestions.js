@@ -2,6 +2,7 @@ const express = require("express");
 const requireSupabase = require("../middleware/requireSupabase");
 const requireAuth = require("../middleware/requireAuth");
 const { getPicks } = require("../lib/hockeyChallengeClient");
+const { getPlayerStats } = require("../lib/nhlStatsClient");
 const { getTeamName } = require("../lib/teamNames");
 
 const router = express.Router();
@@ -30,10 +31,26 @@ const buildPlayerName = (player) =>
   `${player.firstName || ""} ${player.lastName || ""}`.trim() ||
   "Unknown";
 
+const buildStatsColumns = (stats) => ({
+  season_games_played: stats?.seasonGamesPlayed ?? null,
+  season_goals: stats?.seasonGoals ?? null,
+  season_assists: stats?.seasonAssists ?? null,
+  season_points: stats?.seasonPoints ?? null,
+  season_shots: stats?.seasonShots ?? null,
+  season_pp_points: stats?.seasonPowerPlayPoints ?? null,
+  season_shooting_pct: stats?.seasonShootingPct ?? null,
+  season_avg_toi: stats?.seasonAvgToi ?? null,
+  season_faceoff_pct: stats?.seasonFaceoffPct ?? null,
+  last5_games: stats?.last5Games ?? null,
+  last5_goals: stats?.last5Goals ?? null,
+  last5_points: stats?.last5Points ?? null,
+  last5_shots: stats?.last5Shots ?? null,
+});
+
 const getBoard = async (supabase, { boardId }) =>
   supabase
     .from("boards")
-    .select("id, created_by")
+    .select("id, created_by, status")
     .eq("id", boardId)
     .maybeSingle()
     .then(({ data, error }) => ({ data, error }));
@@ -94,7 +111,7 @@ router.get("/", requireSupabase, requireAuth, async (req, res) => {
     userIds.length > 0
       ? await supabase
           .from("profiles")
-          .select("id, display_name, handle")
+          .select("id, display_name")
           .in("id", userIds)
       : { data: [], error: null };
 
@@ -121,7 +138,6 @@ router.get("/", requireSupabase, requireAuth, async (req, res) => {
     groupLabel: row.board_groups?.label ?? "Group",
     groupSortOrder: row.board_groups?.sort_order ?? 0,
     displayName: profileMap.get(row.suggested_by)?.display_name || "Unknown",
-    handle: profileMap.get(row.suggested_by)?.handle || null,
   }));
 
   return res.json({ suggestions });
@@ -151,6 +167,16 @@ router.post("/", requireSupabase, requireAuth, async (req, res) => {
 
   if (!board) {
     return res.status(404).json({ error: "Board not found." });
+  }
+
+  if (board.created_by === userId) {
+    return res
+      .status(400)
+      .json({ error: "You cannot suggest on your own board." });
+  }
+
+  if (board.status === "locked") {
+    return res.status(400).json({ error: "Board is locked." });
   }
 
   if (board.created_by !== userId) {
@@ -242,7 +268,7 @@ router.post("/", requireSupabase, requireAuth, async (req, res) => {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("display_name, handle")
+    .select("display_name")
     .eq("id", userId)
     .maybeSingle();
 
@@ -265,7 +291,6 @@ router.post("/", requireSupabase, requireAuth, async (req, res) => {
         profile?.display_name ||
         req.user.user_metadata?.display_name ||
         "Player",
-      handle: profile?.handle || null,
     },
   });
 });
@@ -274,12 +299,13 @@ router.patch("/:id", requireSupabase, requireAuth, async (req, res) => {
   const supabase = req.supabase;
   const userId = req.user.id;
   const suggestionId = req.params.id;
-  const status = req.body?.status;
+  const rawStatus = req.body?.status;
+  const status = rawStatus === "declined" ? "rejected" : rawStatus;
 
-  if (!["accepted", "declined"].includes(status)) {
+  if (!["accepted", "rejected"].includes(status)) {
     return res
       .status(400)
-      .json({ error: "Status must be accepted or declined." });
+      .json({ error: "Status must be accepted or rejected." });
   }
 
   const { data: suggestion, error: suggestionError } = await supabase
@@ -314,9 +340,37 @@ router.patch("/:id", requireSupabase, requireAuth, async (req, res) => {
     return res.status(400).json({ error: "Suggestion already handled." });
   }
 
+  if (board.status === "locked" && status === "accepted") {
+    return res.status(400).json({ error: "Board is locked." });
+  }
+
   let pickRow = null;
 
   if (status === "accepted") {
+    let opponentCode = null;
+    let opponentName = null;
+    let position = null;
+    let line = null;
+    let ppLine = null;
+    const stats = await getPlayerStats(suggestion.nhl_player_id);
+
+    try {
+      const pickData = await getPicks();
+      const playerMap = buildPlayerMap(pickData.playerLists || []);
+      const player = playerMap.get(suggestion.nhl_player_id);
+      if (player) {
+        opponentCode = player.opponentTeam || null;
+        opponentName = opponentCode ? getTeamName(opponentCode) : null;
+        position = player.position || null;
+        const lineValue = player.line ?? null;
+        const ppValue = player.ppLine ?? null;
+        line = lineValue === null || lineValue === undefined ? null : String(lineValue);
+        ppLine = ppValue === null || ppValue === undefined ? null : String(ppValue);
+      }
+    } catch {
+      // Allow accepting the suggestion even if stats are unavailable.
+    }
+
     const { data: savedPick, error: pickError } = await supabase
       .from("picks")
       .upsert(
@@ -328,12 +382,18 @@ router.patch("/:id", requireSupabase, requireAuth, async (req, res) => {
           player_name: suggestion.player_name,
           team_code: suggestion.team_code,
           team_name: suggestion.team_name,
+          opponent_team_code: opponentCode,
+          opponent_team_name: opponentName,
+          position,
+          line,
+          pp_line: ppLine,
           is_locked: false,
+          ...buildStatsColumns(stats),
         },
         { onConflict: "board_group_id,user_id" }
       )
       .select(
-        "id, player_name, team_code, team_name, is_locked, board_group_id, nhl_player_id, board_groups (label, sort_order)"
+        "id, player_name, team_code, team_name, opponent_team_code, opponent_team_name, position, line, pp_line, season_games_played, season_goals, season_assists, season_points, season_shots, season_pp_points, season_shooting_pct, season_avg_toi, season_faceoff_pct, last5_games, last5_goals, last5_points, last5_shots, is_locked, board_group_id, nhl_player_id, board_groups (label, sort_order)"
       )
       .single();
 

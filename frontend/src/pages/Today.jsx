@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import GroupPickCard from "../components/GroupPickCard";
-import { fetchTodayBoard, getTodayDateKey } from "../lib/boardService";
+import { fetchTodayBoard, getTodayDateKey, lockBoard } from "../lib/boardService";
 import { createComment, fetchComments } from "../lib/commentsService";
 import { fetchPickOptions, savePicks } from "../lib/picksService";
 import {
@@ -15,6 +15,20 @@ const samplePicks = [
     playerName: "Connor McDavid",
     teamCode: "EDM",
     teamName: "Oilers",
+    opponentTeamCode: "CGY",
+    opponentTeamName: "Flames",
+    seasonGamesPlayed: 41,
+    seasonPoints: 62,
+    seasonGoals: 24,
+    seasonAssists: 38,
+    seasonShots: 190,
+    seasonShootingPct: 0.126,
+    seasonPowerPlayPoints: 18,
+    seasonAvgToi: "21:14",
+    seasonFaceoffPct: 0.54,
+    last5Points: 6,
+    last5Goals: 2,
+    last5Shots: 17,
     isLocked: false,
   },
   {
@@ -22,6 +36,20 @@ const samplePicks = [
     playerName: "Auston Matthews",
     teamCode: "TOR",
     teamName: "Maple Leafs",
+    opponentTeamCode: "MTL",
+    opponentTeamName: "Canadiens",
+    seasonGamesPlayed: 39,
+    seasonPoints: 58,
+    seasonGoals: 27,
+    seasonAssists: 31,
+    seasonShots: 176,
+    seasonShootingPct: 0.153,
+    seasonPowerPlayPoints: 16,
+    seasonAvgToi: "20:48",
+    seasonFaceoffPct: 0.51,
+    last5Points: 5,
+    last5Goals: 3,
+    last5Shots: 15,
     isLocked: false,
   },
   {
@@ -29,6 +57,20 @@ const samplePicks = [
     playerName: "Cale Makar",
     teamCode: "COL",
     teamName: "Avalanche",
+    opponentTeamCode: "DAL",
+    opponentTeamName: "Stars",
+    seasonGamesPlayed: 40,
+    seasonPoints: 49,
+    seasonGoals: 12,
+    seasonAssists: 37,
+    seasonShots: 142,
+    seasonShootingPct: 0.085,
+    seasonPowerPlayPoints: 14,
+    seasonAvgToi: "23:08",
+    seasonFaceoffPct: null,
+    last5Points: 7,
+    last5Goals: 1,
+    last5Shots: 11,
     isLocked: false,
   },
 ];
@@ -47,6 +89,24 @@ const mapPickRows = (rows = []) =>
       playerName: pick.player_name,
       teamCode: pick.team_code,
       teamName: pick.team_name,
+      opponentTeamCode: pick.opponent_team_code,
+      opponentTeamName: pick.opponent_team_name,
+      position: pick.position,
+      line: pick.line,
+      ppLine: pick.pp_line,
+      seasonGamesPlayed: pick.season_games_played,
+      seasonGoals: pick.season_goals,
+      seasonAssists: pick.season_assists,
+      seasonPoints: pick.season_points,
+      seasonShots: pick.season_shots,
+      seasonPowerPlayPoints: pick.season_pp_points,
+      seasonShootingPct: pick.season_shooting_pct,
+      seasonAvgToi: pick.season_avg_toi,
+      seasonFaceoffPct: pick.season_faceoff_pct,
+      last5Games: pick.last5_games,
+      last5Goals: pick.last5_goals,
+      last5Points: pick.last5_points,
+      last5Shots: pick.last5_shots,
       isLocked: pick.is_locked,
       sortOrder: pick.board_groups?.sort_order ?? 0,
       boardGroupId: pick.board_group_id,
@@ -79,7 +139,42 @@ const formatTimestamp = (value) => {
   });
 };
 
-export default function Today({ session }) {
+const COMMENTS_PAGE_SIZE = 5;
+
+const formatLineMeta = (value) => {
+  if (value === null || value === undefined || value === "") return "";
+  const raw = String(value).trim();
+  if (!raw) return "";
+  const upper = raw.toUpperCase();
+  if (/^\d+$/.test(upper)) return `L${upper}`;
+  if (upper.startsWith("L") || upper.startsWith("F") || upper.startsWith("D")) {
+    return upper;
+  }
+  return `L${upper}`;
+};
+
+const formatPpMeta = (value) => {
+  if (value === null || value === undefined || value === "") return "";
+  const raw = String(value).trim();
+  if (!raw) return "";
+  const upper = raw.toUpperCase();
+  if (/^\d+$/.test(upper)) return `PP${upper}`;
+  if (upper.startsWith("PP")) return upper;
+  return `PP${upper}`;
+};
+
+const formatSuggestionStatus = (status) => {
+  if (!status) return "";
+  if (status === "rejected") return "declined";
+  return status;
+};
+
+export default function Today({
+  session,
+  onSuggestionCount,
+  onCommentCount,
+  onBoardUpdate,
+}) {
   // TODO: derive board status (Draft/Locked) + lock time from server state.
   // TODO: gate edit/lock actions based on auth + board ownership rules.
   const [board, setBoard] = useState(null);
@@ -94,8 +189,11 @@ export default function Today({ session }) {
   const [selections, setSelections] = useState({});
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [isLocking, setIsLocking] = useState(false);
+  const [lockError, setLockError] = useState("");
   const [suggestions, setSuggestions] = useState([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [suggestionsLoaded, setSuggestionsLoaded] = useState(false);
   const [suggestionsError, setSuggestionsError] = useState("");
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [suggestionGroupId, setSuggestionGroupId] = useState("");
@@ -111,6 +209,11 @@ export default function Today({ session }) {
   const [commentBody, setCommentBody] = useState("");
   const [commentFormError, setCommentFormError] = useState("");
   const [commentSaving, setCommentSaving] = useState(false);
+  const [commentLimit, setCommentLimit] = useState(COMMENTS_PAGE_SIZE);
+  const [replyTargetId, setReplyTargetId] = useState(null);
+  const [replyBody, setReplyBody] = useState("");
+  const [replySaving, setReplySaving] = useState(false);
+  const [replyError, setReplyError] = useState("");
   const userId = session?.user?.id;
   const accessToken = session?.access_token;
   const hasBackend = Boolean(userId && accessToken);
@@ -129,8 +232,11 @@ export default function Today({ session }) {
       setSelections({});
       setIsSaving(false);
       setSaveError("");
+      setIsLocking(false);
+      setLockError("");
       setSuggestions([]);
       setSuggestionsLoading(false);
+      setSuggestionsLoaded(false);
       setSuggestionsError("");
       setIsSuggesting(false);
       setSuggestionGroupId("");
@@ -146,6 +252,11 @@ export default function Today({ session }) {
       setCommentBody("");
       setCommentFormError("");
       setCommentSaving(false);
+      setCommentLimit(COMMENTS_PAGE_SIZE);
+      setReplyTargetId(null);
+      setReplyBody("");
+      setReplySaving(false);
+      setReplyError("");
       return;
     }
 
@@ -228,6 +339,7 @@ export default function Today({ session }) {
       setSuggestions([]);
       setSuggestionsError("");
       setSuggestionsLoading(false);
+      setSuggestionsLoaded(false);
       return;
     }
 
@@ -236,6 +348,7 @@ export default function Today({ session }) {
     const loadSuggestions = async () => {
       setSuggestionsLoading(true);
       setSuggestionsError("");
+      setSuggestionsLoaded(false);
 
       const { data, error } = await fetchSuggestions({
         accessToken,
@@ -247,11 +360,19 @@ export default function Today({ session }) {
       if (error) {
         setSuggestionsError(error.message);
         setSuggestionsLoading(false);
+        setSuggestionsLoaded(true);
         return;
       }
 
-      setSuggestions(data?.suggestions ?? []);
+      const nextSuggestions = data?.suggestions ?? [];
+      setSuggestions(nextSuggestions);
+      setCounts((prev) => ({
+        ...prev,
+        suggestions: nextSuggestions.filter((suggestion) => suggestion.status === "pending")
+          .length,
+      }));
       setSuggestionsLoading(false);
+      setSuggestionsLoaded(true);
     };
 
     loadSuggestions();
@@ -288,7 +409,12 @@ export default function Today({ session }) {
         return;
       }
 
-      setComments(data?.comments ?? []);
+      const nextComments = data?.comments ?? [];
+      setComments(nextComments);
+      setCounts((prev) => ({
+        ...prev,
+        comments: nextComments.length,
+      }));
       setCommentsLoading(false);
     };
 
@@ -298,6 +424,16 @@ export default function Today({ session }) {
       isMounted = false;
     };
   }, [accessToken, board?.id, hasBackend]);
+
+  useEffect(() => {
+    if (board?.id) {
+      setCommentLimit(COMMENTS_PAGE_SIZE);
+    }
+  }, [board?.id]);
+
+  useEffect(() => {
+    onBoardUpdate?.(board);
+  }, [board, onBoardUpdate]);
 
   useEffect(() => {
     if (!isSuggesting) return;
@@ -323,6 +459,9 @@ export default function Today({ session }) {
   const weekNumber = getWeekNumber(activeDate);
   const isLocked = board?.status === "locked";
   const statusLabel = isLocked ? "Locked" : "Draft";
+  const statusPillStyles = isLocked
+    ? "border border-[rgba(240,78,78,0.35)] bg-[linear-gradient(135deg,_rgba(240,78,78,0.18),_rgba(255,180,120,0.24))] text-[color:var(--accent)]"
+    : "border border-[rgba(42,157,244,0.35)] bg-[linear-gradient(135deg,_rgba(42,157,244,0.18),_rgba(129,212,250,0.22))] text-[color:var(--ink)]";
   const lockTimeLabel = board?.lock_at
     ? new Date(board.lock_at).toLocaleTimeString("en-US", {
         hour: "numeric",
@@ -341,9 +480,13 @@ export default function Today({ session }) {
   const picksToRender = shouldShowSample ? samplePicks : picks;
   const showEmptyState =
     hasBackend && !isLoading && picksToRender.length === 0 && !isEditing;
+  const isOwner = board?.created_by === userId;
   const canEdit = hasBackend && board && !isLoading && !loadError && !isLocked;
-  const canSuggest =
-    hasBackend && board && !isLoading && !loadError && !isLocked;
+  const canCreateSuggestions =
+    hasBackend && board && !isLoading && !loadError && !isLocked && !isOwner;
+  const canManageSuggestions = hasBackend && board && !isLoading && !loadError;
+  const canAcceptSuggestions = canManageSuggestions && !isLocked;
+  const canLock = hasBackend && board && !isLoading && !loadError && !isLocked;
   const canComment = hasBackend && board && !isLoading && !loadError;
   const optionsGroups = pickOptions?.groups ?? [];
 
@@ -365,6 +508,67 @@ export default function Today({ session }) {
       ? getOptionsForGroup(activeSuggestionGroup, activeSuggestionIndex)
       : null;
   const suggestionPlayers = suggestionOptionGroup?.players ?? [];
+  const pendingSuggestionCount = useMemo(
+    () => suggestions.filter((suggestion) => suggestion.status === "pending").length,
+    [suggestions]
+  );
+  const { topLevelComments, repliesByParent } = useMemo(() => {
+    const topLevel = [];
+    const repliesMap = new Map();
+    const threadActivity = new Map();
+    comments.forEach((comment) => {
+      const createdAt = new Date(comment.createdAt).getTime();
+      if (comment.parentId) {
+        if (!repliesMap.has(comment.parentId)) {
+          repliesMap.set(comment.parentId, []);
+        }
+        repliesMap.get(comment.parentId).push(comment);
+        const current = threadActivity.get(comment.parentId) || 0;
+        if (createdAt > current) {
+          threadActivity.set(comment.parentId, createdAt);
+        }
+        return;
+      }
+      topLevel.push(comment);
+      const current = threadActivity.get(comment.id) || 0;
+      if (createdAt > current) {
+        threadActivity.set(comment.id, createdAt);
+      }
+    });
+    repliesMap.forEach((list) =>
+      list.sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      )
+    );
+    topLevel.sort((a, b) => {
+      const aTime = threadActivity.get(a.id) || 0;
+      const bTime = threadActivity.get(b.id) || 0;
+      return bTime - aTime;
+    });
+    return { topLevelComments: topLevel, repliesByParent: repliesMap };
+  }, [comments]);
+  const hasMoreComments = topLevelComments.length > commentLimit;
+  const commentsToShow = topLevelComments.slice(0, commentLimit);
+
+  useEffect(() => {
+    if (!suggestionsLoaded) return;
+    onSuggestionCount?.(pendingSuggestionCount);
+  }, [onSuggestionCount, pendingSuggestionCount, suggestionsLoaded]);
+
+  useEffect(() => {
+    if (!hasBackend) {
+      onCommentCount?.(0);
+      return;
+    }
+    if (!board?.id) return;
+    onCommentCount?.(counts.comments);
+  }, [board?.id, counts.comments, hasBackend, onCommentCount]);
+
+  useEffect(() => {
+    if (!canCreateSuggestions && isSuggesting) {
+      setIsSuggesting(false);
+    }
+  }, [canCreateSuggestions, isSuggesting]);
 
   const startEditing = () => {
     if (!canEdit) return;
@@ -423,8 +627,37 @@ export default function Today({ session }) {
     setIsEditing(false);
   };
 
+  const handleLockPicks = async () => {
+    if (!board?.id || !canLock || isLocking) return;
+    setIsLocking(true);
+    setLockError("");
+
+    const { data, error } = await lockBoard({
+      accessToken,
+      boardId: board.id,
+    });
+
+    if (error) {
+      setLockError(error.message);
+      setIsLocking(false);
+      return;
+    }
+
+    if (data?.board) {
+      setBoard((prev) => ({ ...prev, ...data.board }));
+    }
+
+    if (data?.picks) {
+      setPicks(mapPickRows(data.picks));
+    }
+
+    setIsEditing(false);
+    setIsSuggesting(false);
+    setIsLocking(false);
+  };
+
   const startSuggesting = (groupId) => {
-    if (!canSuggest) return;
+    if (!canCreateSuggestions) return;
     setSuggestionGroupId(groupId || orderedGroups[0]?.id || "");
     setSuggestionPlayerId("");
     setSuggestionReason("");
@@ -480,13 +713,17 @@ export default function Today({ session }) {
 
   const handleSuggestionAction = async (suggestionId, status) => {
     if (!suggestionId || suggestionActionId) return;
+    const nextStatus = status === "declined" ? "rejected" : status;
+    const wasPending = suggestions.some(
+      (suggestion) => suggestion.id === suggestionId && suggestion.status === "pending"
+    );
     setSuggestionActionId(suggestionId);
     setSuggestionActionError("");
 
     const { data, error } = await updateSuggestion({
       accessToken,
       suggestionId,
-      status,
+      status: nextStatus,
     });
 
     if (error) {
@@ -498,10 +735,16 @@ export default function Today({ session }) {
     setSuggestions((prev) =>
       prev.map((suggestion) =>
         suggestion.id === suggestionId
-          ? { ...suggestion, status }
+          ? { ...suggestion, status: nextStatus }
           : suggestion
       )
     );
+    if (wasPending && (nextStatus === "accepted" || nextStatus === "rejected")) {
+      setCounts((prev) => ({
+        ...prev,
+        suggestions: Math.max(0, (prev.suggestions || 0) - 1),
+      }));
+    }
 
     if (data?.pick) {
       const mappedPick = mapPickRows([data.pick])[0];
@@ -551,6 +794,39 @@ export default function Today({ session }) {
     setCommentSaving(false);
   };
 
+  const handleReplySubmit = async (event, parentId) => {
+    event.preventDefault();
+    if (!board?.id || !parentId || !replyBody.trim()) return;
+    setReplySaving(true);
+    setReplyError("");
+
+    const { data, error } = await createComment({
+      accessToken,
+      boardId: board.id,
+      body: replyBody.trim(),
+      parentId,
+    });
+
+    if (error) {
+      setReplyError(error.message);
+      setReplySaving(false);
+      return;
+    }
+
+    const newReply = data?.comment;
+    if (newReply) {
+      setComments((prev) => [newReply, ...prev]);
+      setCounts((prev) => ({
+        ...prev,
+        comments: (prev.comments || 0) + 1,
+      }));
+    }
+
+    setReplyBody("");
+    setReplyTargetId(null);
+    setReplySaving(false);
+  };
+
   return (
     <div className="space-y-5">
       {/* Page header */}
@@ -572,20 +848,22 @@ export default function Today({ session }) {
             <span className="text-[10px] uppercase tracking-[0.35em] text-[color:var(--muted)]">
               Status
             </span>
-            <span className="rounded-full bg-[rgba(244,68,79,0.14)] px-3 py-1 text-xs font-semibold text-[color:var(--accent)]">
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-semibold shadow-[0_8px_18px_rgba(15,23,42,0.12)] ${statusPillStyles}`}
+            >
               {statusLabel}
             </span>
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap gap-2 text-xs text-[color:var(--muted)]">
-          <span className="rounded-full bg-[rgba(15,23,42,0.06)] px-3 py-1">
+        <div className="mt-4 flex flex-wrap gap-2 text-xs text-[color:var(--ink-2)]">
+          <span className="rounded-full border border-white/70 bg-white/85 px-3 py-1 shadow-sm">
             {groupCount} groups
           </span>
-          <span className="rounded-full bg-[rgba(15,23,42,0.06)] px-3 py-1">
+          <span className="rounded-full border border-white/70 bg-white/85 px-3 py-1 shadow-sm">
             {counts.comments} comments
           </span>
-          <span className="rounded-full bg-[rgba(15,23,42,0.06)] px-3 py-1">
+          <span className="rounded-full border border-white/70 bg-white/85 px-3 py-1 shadow-sm">
             Lock by {lockTimeLabel}
           </span>
         </div>
@@ -648,7 +926,7 @@ export default function Today({ session }) {
                     No groups available yet.
                   </div>
                 ) : (
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-4">
                     {orderedGroups.map((group, index) => {
                       const optionGroup = getOptionsForGroup(group, index);
                       const players = optionGroup?.players ?? [];
@@ -676,8 +954,10 @@ export default function Today({ session }) {
                                 parts.push(`vs ${player.opponentTeam}`);
                               }
                               if (player.position) parts.push(player.position);
-                              if (player.line) parts.push(`L${player.line}`);
-                              if (player.ppLine) parts.push(`PP${player.ppLine}`);
+                              const lineLabel = formatLineMeta(player.line);
+                              if (lineLabel) parts.push(lineLabel);
+                              const ppLabel = formatPpMeta(player.ppLine);
+                              if (ppLabel) parts.push(ppLabel);
                               const meta = parts.length
                                 ? ` - ${parts.join(" | ")}`
                                 : "";
@@ -737,7 +1017,7 @@ export default function Today({ session }) {
                 key={pick.id ?? pick.groupLabel}
                 {...pick}
                 onSuggest={
-                  hasBackend && canSuggest && pick.boardGroupId
+                  canCreateSuggestions && pick.boardGroupId
                     ? () => startSuggesting(pick.boardGroupId)
                     : undefined
                 }
@@ -755,13 +1035,13 @@ export default function Today({ session }) {
             <span className="text-xs text-[color:var(--muted)]">
               {counts.suggestions}
             </span>
-            {hasBackend ? (
+            {canCreateSuggestions ? (
               <button
                 type="button"
                 onClick={() =>
                   isSuggesting ? cancelSuggesting() : startSuggesting()
                 }
-                disabled={!canSuggest}
+                disabled={!canCreateSuggestions}
                 className="rounded-full border border-white/70 bg-white/70 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-[color:var(--ink)] shadow-sm hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSuggesting ? "Close" : "New"}
@@ -819,8 +1099,10 @@ export default function Today({ session }) {
                       parts.push(`vs ${player.opponentTeam}`);
                     }
                     if (player.position) parts.push(player.position);
-                    if (player.line) parts.push(`L${player.line}`);
-                    if (player.ppLine) parts.push(`PP${player.ppLine}`);
+                    const lineLabel = formatLineMeta(player.line);
+                    if (lineLabel) parts.push(lineLabel);
+                    const ppLabel = formatPpMeta(player.ppLine);
+                    if (ppLabel) parts.push(ppLabel);
                     const meta = parts.length ? ` - ${parts.join(" | ")}` : "";
                     const label = `${player.fullName}${meta}${
                       player.isUnavailable ? " (Out)" : ""
@@ -917,13 +1199,12 @@ export default function Today({ session }) {
                     ) : null}
                   </div>
                   <span className="rounded-full bg-[rgba(15,23,42,0.08)] px-2 py-1 text-[10px] uppercase tracking-[0.28em] text-[color:var(--muted)]">
-                    {suggestion.status}
+                    {formatSuggestionStatus(suggestion.status)}
                   </span>
                 </div>
                 <div className="mt-2 flex items-center justify-between text-xs text-[color:var(--muted)]">
                   <span>
                     {suggestion.displayName}
-                    {suggestion.handle ? ` - @${suggestion.handle}` : ""}
                   </span>
                   <span>{formatTimestamp(suggestion.createdAt)}</span>
                 </div>
@@ -934,7 +1215,9 @@ export default function Today({ session }) {
                       onClick={() =>
                         handleSuggestionAction(suggestion.id, "accepted")
                       }
-                      disabled={!canSuggest || suggestionActionId === suggestion.id}
+                      disabled={
+                        !canAcceptSuggestions || suggestionActionId === suggestion.id
+                      }
                       className="rounded-full bg-[color:var(--ink)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-white disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Accept
@@ -942,9 +1225,11 @@ export default function Today({ session }) {
                     <button
                       type="button"
                       onClick={() =>
-                        handleSuggestionAction(suggestion.id, "declined")
+                        handleSuggestionAction(suggestion.id, "rejected")
                       }
-                      disabled={!canSuggest || suggestionActionId === suggestion.id}
+                      disabled={
+                        !canManageSuggestions || suggestionActionId === suggestion.id
+                      }
                       className="rounded-full border border-white/80 bg-white/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-[color:var(--ink)] disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Decline
@@ -989,23 +1274,150 @@ export default function Today({ session }) {
           </div>
         ) : (
           <div className="space-y-2">
-            {comments.map((comment) => (
-              <div
-                key={comment.id}
-                className="rounded-2xl border border-white/80 bg-white/70 px-4 py-3"
+            {commentsToShow.map((comment) => {
+              const replies = repliesByParent.get(comment.id) || [];
+              const isMine = comment.userId === userId;
+              const displayName =
+                comment.displayName || (isMine ? "You" : "Friend");
+              const commentCardStyles = isMine
+                ? "border border-[rgba(42,157,244,0.35)] border-l-4 border-l-[rgba(42,157,244,0.85)] bg-[linear-gradient(135deg,_rgba(42,157,244,0.12),_rgba(255,255,255,0.85))]"
+                : "border border-[rgba(16,185,129,0.28)] border-l-4 border-l-[rgba(16,185,129,0.75)] bg-[linear-gradient(135deg,_rgba(16,185,129,0.08),_rgba(255,255,255,0.9))]";
+              return (
+                <div key={comment.id} className="space-y-2">
+                  <div className={`rounded-2xl px-4 py-3 ${commentCardStyles}`}>
+                    <div className="flex items-center justify-between text-xs text-[color:var(--muted)]">
+                      <span className="flex items-center gap-2">
+                        <span className="font-semibold text-[color:var(--ink)]">
+                          {displayName}
+                        </span>
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.2em] text-[color:var(--ink)] ${
+                            isMine
+                              ? "border-[rgba(42,157,244,0.35)] bg-[rgba(42,157,244,0.12)]"
+                              : "border-[rgba(16,185,129,0.35)] bg-[rgba(16,185,129,0.12)]"
+                          }`}
+                        >
+                          {isMine ? "You" : "Friend"}
+                        </span>
+                      </span>
+                      <span>{formatTimestamp(comment.createdAt)}</span>
+                    </div>
+                    <div className="mt-2 text-sm text-[color:var(--ink)]">
+                      {comment.body}
+                    </div>
+                    {canComment ? (
+                      <div className="mt-3 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReplyTargetId(
+                              replyTargetId === comment.id ? null : comment.id
+                            );
+                            setReplyBody("");
+                            setReplyError("");
+                          }}
+                          className="rounded-full border border-white/80 bg-white/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-[color:var(--ink)] shadow-sm"
+                        >
+                          Reply
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {replies.length ? (
+                    <div className="space-y-2 pl-6">
+                      {replies.map((reply) => {
+                        const replyIsMine = reply.userId === userId;
+                        const replyName =
+                          reply.displayName || (replyIsMine ? "You" : "Friend");
+                        const replyStyles = replyIsMine
+                          ? "border border-[rgba(42,157,244,0.3)] border-l-4 border-l-[rgba(42,157,244,0.7)] bg-[rgba(42,157,244,0.08)]"
+                          : "border border-[rgba(16,185,129,0.22)] border-l-4 border-l-[rgba(16,185,129,0.6)] bg-[rgba(16,185,129,0.06)]";
+                        return (
+                          <div
+                            key={reply.id}
+                            className={`rounded-2xl px-4 py-3 ${replyStyles}`}
+                          >
+                            <div className="flex items-center justify-between text-xs text-[color:var(--muted)]">
+                              <span className="flex items-center gap-2">
+                                <span className="font-semibold text-[color:var(--ink)]">
+                                  {replyName}
+                                </span>
+                                <span
+                                  className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.2em] text-[color:var(--ink)] ${
+                                    replyIsMine
+                                      ? "border-[rgba(42,157,244,0.35)] bg-[rgba(42,157,244,0.12)]"
+                                      : "border-[rgba(16,185,129,0.35)] bg-[rgba(16,185,129,0.12)]"
+                                  }`}
+                                >
+                                  {replyIsMine ? "You" : "Friend"}
+                                </span>
+                              </span>
+                              <span>{formatTimestamp(reply.createdAt)}</span>
+                            </div>
+                            <div className="mt-2 text-sm text-[color:var(--ink)]">
+                              {reply.body}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+
+                  {replyTargetId === comment.id ? (
+                    <form
+                      onSubmit={(event) => handleReplySubmit(event, comment.id)}
+                      className="space-y-2 pl-6"
+                    >
+                      <textarea
+                        value={replyBody}
+                        onChange={(event) => setReplyBody(event.target.value)}
+                        className="w-full rounded-2xl border border-white/80 bg-white/80 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-white/80"
+                        placeholder="Write a reply..."
+                        rows={2}
+                        disabled={!canComment || replySaving}
+                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="submit"
+                          disabled={!canComment || replySaving || !replyBody.trim()}
+                          className="rounded-2xl bg-[linear-gradient(135deg,_#0b1424,_#1f3a60)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-white shadow-[0_12px_26px_rgba(15,23,42,0.25)] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {replySaving ? "Sending..." : "Reply"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReplyTargetId(null);
+                            setReplyBody("");
+                            setReplyError("");
+                          }}
+                          className="rounded-2xl border border-white/80 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)]"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      {replyError ? (
+                        <div className="text-xs text-[color:var(--accent)]">
+                          {replyError}
+                        </div>
+                      ) : null}
+                    </form>
+                  ) : null}
+                </div>
+              );
+            })}
+            {hasMoreComments ? (
+              <button
+                type="button"
+                onClick={() =>
+                  setCommentLimit((prev) => prev + COMMENTS_PAGE_SIZE)
+                }
+                className="w-full rounded-2xl border border-white/80 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)] shadow-sm"
               >
-                <div className="flex items-center justify-between text-xs text-[color:var(--muted)]">
-                  <span>
-                    {comment.displayName}
-                    {comment.handle ? ` - @${comment.handle}` : ""}
-                  </span>
-                  <span>{formatTimestamp(comment.createdAt)}</span>
-                </div>
-                <div className="mt-2 text-sm text-[color:var(--ink)]">
-                  {comment.body}
-                </div>
-              </div>
-            ))}
+                Show more comments
+              </button>
+            ) : null}
           </div>
         )}
 
@@ -1041,12 +1453,19 @@ export default function Today({ session }) {
       <div className="pt-2 motion-safe:animate-fade-up anim-delay-320">
         <button
           type="button"
-          className="w-full rounded-2xl bg-[linear-gradient(135deg,_#f4444f,_#ff885e)] py-3 font-display text-lg uppercase tracking-[0.35em] text-white shadow-[0_18px_40px_rgba(244,68,79,0.35)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_50px_rgba(244,68,79,0.45)]"
+          onClick={handleLockPicks}
+          disabled={!canLock || isLocking}
+          className="w-full rounded-2xl bg-[linear-gradient(135deg,_#f04e4e,_#ffb454)] py-3 font-display text-lg uppercase tracking-[0.35em] text-white shadow-[0_18px_40px_rgba(240,78,78,0.32)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_50px_rgba(240,78,78,0.42)] disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0 disabled:hover:shadow-[0_18px_40px_rgba(240,78,78,0.32)]"
         >
-          Lock Picks
+          {isLocked ? "Picks Locked" : isLocking ? "Locking..." : "Lock Picks"}
           {/* TODO: lock picks action (only owner can lock) */}
           {/* TODO: confirm dialog + require all groups filled */}
         </button>
+        {lockError ? (
+          <div className="mt-3 rounded-2xl border border-[rgba(244,68,79,0.3)] bg-[rgba(244,68,79,0.1)] px-3 py-2 text-xs text-[color:var(--accent)]">
+            {lockError}
+          </div>
+        ) : null}
       </div>
     </div>
   );

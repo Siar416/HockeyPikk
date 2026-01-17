@@ -24,9 +24,11 @@ end $$;
 create table if not exists public.profiles (
   id uuid references auth.users on delete cascade primary key,
   display_name text not null,
-  handle text unique,
   created_at timestamptz not null default now()
 );
+
+alter table public.profiles
+  drop column if exists handle;
 
 create table if not exists public.boards (
   id uuid primary key default gen_random_uuid(),
@@ -57,6 +59,24 @@ create table if not exists public.picks (
   player_name text not null,
   team_code text not null,
   team_name text not null,
+  opponent_team_code text,
+  opponent_team_name text,
+  position text,
+  line text,
+  pp_line text,
+  season_games_played int,
+  season_goals int,
+  season_assists int,
+  season_points int,
+  season_shots int,
+  season_pp_points int,
+  season_shooting_pct numeric,
+  season_avg_toi text,
+  season_faceoff_pct numeric,
+  last5_games int,
+  last5_goals int,
+  last5_points int,
+  last5_shots int,
   is_locked boolean not null default false,
   created_at timestamptz not null default now(),
   unique (board_group_id, user_id)
@@ -64,6 +84,90 @@ create table if not exists public.picks (
 
 alter table public.picks
   add column if not exists nhl_player_id integer;
+
+alter table public.picks
+  add column if not exists opponent_team_code text;
+
+alter table public.picks
+  add column if not exists opponent_team_name text;
+
+alter table public.picks
+  add column if not exists position text;
+
+alter table public.picks
+  add column if not exists line text;
+
+alter table public.picks
+  add column if not exists pp_line text;
+
+alter table public.picks
+  add column if not exists season_games_played int;
+
+alter table public.picks
+  add column if not exists season_goals int;
+
+alter table public.picks
+  add column if not exists season_assists int;
+
+alter table public.picks
+  add column if not exists season_points int;
+
+alter table public.picks
+  add column if not exists season_shots int;
+
+alter table public.picks
+  add column if not exists season_pp_points int;
+
+alter table public.picks
+  add column if not exists season_shooting_pct numeric;
+
+alter table public.picks
+  add column if not exists season_avg_toi text;
+
+alter table public.picks
+  add column if not exists season_faceoff_pct numeric;
+
+alter table public.picks
+  add column if not exists last5_games int;
+
+alter table public.picks
+  add column if not exists last5_goals int;
+
+alter table public.picks
+  add column if not exists last5_points int;
+
+alter table public.picks
+  add column if not exists last5_shots int;
+
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'picks'
+      and column_name = 'line'
+      and data_type <> 'text'
+  ) then
+    alter table public.picks
+      alter column line type text using line::text;
+  end if;
+end $$;
+
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'picks'
+      and column_name = 'pp_line'
+      and data_type <> 'text'
+  ) then
+    alter table public.picks
+      alter column pp_line type text using pp_line::text;
+  end if;
+end $$;
 
 create index if not exists picks_board_user_idx
   on public.picks (board_id, user_id);
@@ -92,9 +196,13 @@ create table if not exists public.comments (
   id uuid primary key default gen_random_uuid(),
   board_id uuid not null references public.boards on delete cascade,
   user_id uuid not null references auth.users on delete cascade,
+  parent_id uuid references public.comments on delete cascade,
   body text not null,
   created_at timestamptz not null default now()
 );
+
+alter table public.comments
+  add column if not exists parent_id uuid references public.comments on delete cascade;
 
 create index if not exists comments_board_idx
   on public.comments (board_id);

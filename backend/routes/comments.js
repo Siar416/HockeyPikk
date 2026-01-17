@@ -11,13 +11,29 @@ const formatSchemaError = (error) => {
   return error?.message || "Request failed.";
 };
 
-const getBoardForUser = async (supabase, { boardId, userId }) =>
+const getBoard = async (supabase, { boardId }) =>
   supabase
     .from("boards")
     .select("id, created_by")
     .eq("id", boardId)
     .maybeSingle()
     .then(({ data, error }) => ({ data, error }));
+
+const areFriends = async (supabase, { userId, friendId }) => {
+  const { data, error } = await supabase
+    .from("friends")
+    .select("id")
+    .or(
+      `and(user_id.eq.${userId},friend_id.eq.${friendId}),and(user_id.eq.${friendId},friend_id.eq.${userId})`
+    )
+    .limit(1);
+
+  if (error) {
+    return { isFriend: false, error };
+  }
+
+  return { isFriend: (data ?? []).length > 0, error: null };
+};
 
 router.get("/", requireSupabase, requireAuth, async (req, res) => {
   const supabase = req.supabase;
@@ -28,22 +44,36 @@ router.get("/", requireSupabase, requireAuth, async (req, res) => {
     return res.status(400).json({ error: "boardId is required." });
   }
 
-  const { data: board, error: boardError } = await getBoardForUser(supabase, {
+  const { data: board, error: boardError } = await getBoard(supabase, {
     boardId,
-    userId,
   });
 
   if (boardError) {
     return res.status(500).json({ error: formatSchemaError(boardError) });
   }
 
-  if (!board || board.created_by !== userId) {
+  if (!board) {
     return res.status(404).json({ error: "Board not found." });
+  }
+
+  if (board.created_by !== userId) {
+    const { isFriend, error: friendError } = await areFriends(supabase, {
+      userId,
+      friendId: board.created_by,
+    });
+
+    if (friendError) {
+      return res.status(500).json({ error: formatSchemaError(friendError) });
+    }
+
+    if (!isFriend) {
+      return res.status(403).json({ error: "Not authorized." });
+    }
   }
 
   const { data: commentRows, error: commentsError } = await supabase
     .from("comments")
-    .select("id, body, created_at, user_id")
+    .select("id, body, created_at, user_id, parent_id")
     .eq("board_id", boardId)
     .order("created_at", { ascending: false });
 
@@ -56,7 +86,7 @@ router.get("/", requireSupabase, requireAuth, async (req, res) => {
     userIds.length > 0
       ? await supabase
           .from("profiles")
-          .select("id, display_name, handle")
+          .select("id, display_name")
           .in("id", userIds)
       : { data: [], error: null };
 
@@ -73,8 +103,8 @@ router.get("/", requireSupabase, requireAuth, async (req, res) => {
     body: row.body,
     createdAt: row.created_at,
     userId: row.user_id,
+    parentId: row.parent_id,
     displayName: profileMap.get(row.user_id)?.display_name || "Unknown",
-    handle: profileMap.get(row.user_id)?.handle || null,
   }));
 
   return res.json({ comments });
@@ -85,22 +115,53 @@ router.post("/", requireSupabase, requireAuth, async (req, res) => {
   const userId = req.user.id;
   const boardId = req.body?.boardId;
   const body = String(req.body?.body || "").trim();
+  const parentId = req.body?.parentId ?? null;
 
   if (!boardId || !body) {
     return res.status(400).json({ error: "boardId and body are required." });
   }
 
-  const { data: board, error: boardError } = await getBoardForUser(supabase, {
+  const { data: board, error: boardError } = await getBoard(supabase, {
     boardId,
-    userId,
   });
 
   if (boardError) {
     return res.status(500).json({ error: formatSchemaError(boardError) });
   }
 
-  if (!board || board.created_by !== userId) {
+  if (!board) {
     return res.status(404).json({ error: "Board not found." });
+  }
+
+  if (board.created_by !== userId) {
+    const { isFriend, error: friendError } = await areFriends(supabase, {
+      userId,
+      friendId: board.created_by,
+    });
+
+    if (friendError) {
+      return res.status(500).json({ error: formatSchemaError(friendError) });
+    }
+
+    if (!isFriend) {
+      return res.status(403).json({ error: "Not authorized." });
+    }
+  }
+
+  if (parentId) {
+    const { data: parentComment, error: parentError } = await supabase
+      .from("comments")
+      .select("id, board_id")
+      .eq("id", parentId)
+      .maybeSingle();
+
+    if (parentError) {
+      return res.status(500).json({ error: formatSchemaError(parentError) });
+    }
+
+    if (!parentComment || parentComment.board_id !== boardId) {
+      return res.status(400).json({ error: "Invalid parent comment." });
+    }
   }
 
   const { data: commentRow, error: insertError } = await supabase
@@ -108,9 +169,10 @@ router.post("/", requireSupabase, requireAuth, async (req, res) => {
     .insert({
       board_id: boardId,
       user_id: userId,
+      parent_id: parentId,
       body,
     })
-    .select("id, body, created_at, user_id")
+    .select("id, body, created_at, user_id, parent_id")
     .single();
 
   if (insertError) {
@@ -119,7 +181,7 @@ router.post("/", requireSupabase, requireAuth, async (req, res) => {
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("id, display_name, handle")
+    .select("id, display_name")
     .eq("id", userId)
     .maybeSingle();
 
@@ -133,8 +195,8 @@ router.post("/", requireSupabase, requireAuth, async (req, res) => {
       body: commentRow.body,
       createdAt: commentRow.created_at,
       userId: commentRow.user_id,
+      parentId: commentRow.parent_id,
       displayName: profile?.display_name || "Unknown",
-      handle: profile?.handle || null,
     },
   });
 });

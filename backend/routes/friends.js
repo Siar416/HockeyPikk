@@ -11,11 +11,6 @@ const formatSchemaError = (error) => {
   return error?.message || "Request failed.";
 };
 
-const normalizeHandle = (value) => {
-  if (!value) return "";
-  return value.trim().replace(/^@/, "");
-};
-
 const DATE_KEY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 const getDateKey = (input) => {
@@ -93,7 +88,7 @@ router.get("/", requireSupabase, requireAuth, async (req, res) => {
     friendIds.length > 0
       ? await supabase
           .from("profiles")
-          .select("id, display_name, handle")
+          .select("id, display_name")
           .in("id", friendIds)
       : { data: [], error: null };
 
@@ -118,7 +113,7 @@ router.get("/", requireSupabase, requireAuth, async (req, res) => {
     senderIds.length > 0
       ? await supabase
           .from("profiles")
-          .select("id, display_name, handle")
+          .select("id, display_name")
           .in("id", senderIds)
       : { data: [], error: null };
 
@@ -139,7 +134,6 @@ router.get("/", requireSupabase, requireAuth, async (req, res) => {
     id: row.friend_id,
     createdAt: row.created_at,
     displayName: profileMap.get(row.friend_id)?.display_name || "Unknown",
-    handle: profileMap.get(row.friend_id)?.handle || null,
   }));
 
   const requests = (requestRows ?? []).map((row) => ({
@@ -148,7 +142,6 @@ router.get("/", requireSupabase, requireAuth, async (req, res) => {
     createdAt: row.created_at,
     status: row.status,
     displayName: senderMap.get(row.sender_id)?.display_name || "Unknown",
-    handle: senderMap.get(row.sender_id)?.handle || null,
   }));
 
   return res.json({ friends, requests });
@@ -157,69 +150,45 @@ router.get("/", requireSupabase, requireAuth, async (req, res) => {
 router.post("/requests", requireSupabase, requireAuth, async (req, res) => {
   const supabase = req.supabase;
   const userId = req.user.id;
-  const rawIdentifier = String(req.body?.handle || req.body?.email || "").trim();
+  const rawEmail = String(req.body?.email || "").trim();
 
-  if (!rawIdentifier) {
-    return res
-      .status(400)
-      .json({ error: "Friend handle or email is required." });
+  if (!rawEmail) {
+    return res.status(400).json({ error: "Friend email is required." });
   }
 
-  let recipient = null;
+  if (!rawEmail.includes("@")) {
+    return res.status(400).json({ error: "Enter a valid email address." });
+  }
 
-  if (rawIdentifier.includes("@")) {
-    const email = rawIdentifier.toLowerCase();
-    const { user: userRow, error: userError } = await findUserByEmail(
-      supabase,
-      email
-    );
+  const email = rawEmail.toLowerCase();
+  const { user: userRow, error: userError } = await findUserByEmail(
+    supabase,
+    email
+  );
 
-    if (userError) {
-      return res.status(500).json({ error: formatSchemaError(userError) });
-    }
+  if (userError) {
+    return res.status(500).json({ error: formatSchemaError(userError) });
+  }
 
-    if (!userRow) {
-      return res.status(404).json({ error: "No user found with that email." });
-    }
+  if (!userRow) {
+    return res.status(404).json({ error: "No user found with that email." });
+  }
 
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("id, display_name, handle")
-      .eq("id", userRow.id)
-      .maybeSingle();
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("id, display_name")
+    .eq("id", userRow.id)
+    .maybeSingle();
 
-    if (profileError) {
-      return res.status(500).json({ error: formatSchemaError(profileError) });
-    }
+  if (profileError) {
+    return res.status(500).json({ error: formatSchemaError(profileError) });
+  }
 
-    recipient = profile || {
+  const recipient =
+    profile || {
       id: userRow.id,
       display_name: "Player",
-      handle: null,
     };
-  } else {
-    const handle = normalizeHandle(rawIdentifier);
-
-    if (!handle) {
-      return res.status(400).json({ error: "Friend handle is required." });
-    }
-
-    const { data: profile, error: recipientError } = await supabase
-      .from("profiles")
-      .select("id, display_name, handle")
-      .eq("handle", handle)
-      .maybeSingle();
-
-    if (recipientError) {
-      return res.status(500).json({ error: formatSchemaError(recipientError) });
-    }
-
-    if (!profile) {
-      return res.status(404).json({ error: "No user found with that handle." });
-    }
-
-    recipient = profile;
-  }
 
   if (recipient.id === userId) {
     return res.status(400).json({ error: "You cannot invite yourself." });
@@ -311,7 +280,6 @@ router.post("/requests", requireSupabase, requireAuth, async (req, res) => {
     recipient: {
       id: recipient.id,
       displayName: recipient.display_name,
-      handle: recipient.handle,
     },
   });
 });
@@ -417,7 +385,7 @@ router.get("/:friendId/board", requireSupabase, requireAuth, async (req, res) =>
 
   const { data: friendProfile, error: profileError } = await supabase
     .from("profiles")
-    .select("id, display_name, handle")
+    .select("id, display_name")
     .eq("id", friendId)
     .maybeSingle();
 
@@ -444,7 +412,6 @@ router.get("/:friendId/board", requireSupabase, requireAuth, async (req, res) =>
       friend: {
         id: friendId,
         displayName: friendProfile?.display_name || "Unknown",
-        handle: friendProfile?.handle || null,
       },
       board: null,
       picks: [],
@@ -454,7 +421,7 @@ router.get("/:friendId/board", requireSupabase, requireAuth, async (req, res) =>
   const { data: picks, error: picksError } = await supabase
     .from("picks")
     .select(
-      "id, player_name, team_code, team_name, is_locked, board_group_id, nhl_player_id, board_groups (label, sort_order)"
+      "id, player_name, team_code, team_name, opponent_team_code, opponent_team_name, position, line, pp_line, season_games_played, season_goals, season_assists, season_points, season_shots, season_pp_points, season_shooting_pct, season_avg_toi, season_faceoff_pct, last5_games, last5_goals, last5_points, last5_shots, is_locked, board_group_id, nhl_player_id, board_groups (label, sort_order)"
     )
     .eq("board_id", board.id)
     .eq("user_id", friendId)
@@ -468,7 +435,6 @@ router.get("/:friendId/board", requireSupabase, requireAuth, async (req, res) =>
     friend: {
       id: friendId,
       displayName: friendProfile?.display_name || "Unknown",
-      handle: friendProfile?.handle || null,
     },
     board,
     picks: picks ?? [],

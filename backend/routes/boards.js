@@ -136,7 +136,7 @@ router.get("/today", requireSupabase, requireAuth, async (req, res) => {
     supabase
       .from("picks")
       .select(
-        "id, player_name, team_code, team_name, is_locked, board_group_id, nhl_player_id, board_groups (label, sort_order)"
+        "id, player_name, team_code, team_name, opponent_team_code, opponent_team_name, position, line, pp_line, season_games_played, season_goals, season_assists, season_points, season_shots, season_pp_points, season_shooting_pct, season_avg_toi, season_faceoff_pct, last5_games, last5_goals, last5_points, last5_shots, is_locked, board_group_id, nhl_player_id, board_groups (label, sort_order)"
       )
       .eq("board_id", resolvedBoard.id)
       .eq("user_id", userId)
@@ -148,7 +148,8 @@ router.get("/today", requireSupabase, requireAuth, async (req, res) => {
     supabase
       .from("suggestions")
       .select("id", { count: "exact", head: true })
-      .eq("board_id", resolvedBoard.id),
+      .eq("board_id", resolvedBoard.id)
+      .eq("status", "pending"),
   ]);
 
   const queryError = picksError || commentsError || suggestionsError;
@@ -164,6 +165,66 @@ router.get("/today", requireSupabase, requireAuth, async (req, res) => {
       comments: commentCount ?? 0,
       suggestions: suggestionCount ?? 0,
     },
+  });
+});
+
+router.post("/:id/lock", requireSupabase, requireAuth, async (req, res) => {
+  const supabase = req.supabase;
+  const userId = req.user.id;
+  const boardId = req.params.id;
+
+  if (!boardId) {
+    return res.status(400).json({ error: "boardId is required." });
+  }
+
+  const { data: board, error: boardError } = await supabase
+    .from("boards")
+    .select("id, status, lock_at, created_by")
+    .eq("id", boardId)
+    .maybeSingle();
+
+  if (boardError) {
+    return res.status(500).json({ error: formatSchemaError(boardError) });
+  }
+
+  if (!board) {
+    return res.status(404).json({ error: "Board not found." });
+  }
+
+  if (board.created_by !== userId) {
+    return res.status(403).json({ error: "Not authorized." });
+  }
+
+  const lockAt = board.lock_at || new Date().toISOString();
+
+  const { data: lockedBoard, error: lockError } = await supabase
+    .from("boards")
+    .update({ status: "locked", lock_at: lockAt })
+    .eq("id", boardId)
+    .select("id, status, lock_at")
+    .single();
+
+  if (lockError) {
+    return res.status(500).json({ error: formatSchemaError(lockError) });
+  }
+
+  const { data: lockedPicks, error: picksError } = await supabase
+    .from("picks")
+    .update({ is_locked: true })
+    .eq("board_id", boardId)
+    .eq("user_id", userId)
+    .select(
+      "id, player_name, team_code, team_name, opponent_team_code, opponent_team_name, position, line, pp_line, season_games_played, season_goals, season_assists, season_points, season_shots, season_pp_points, season_shooting_pct, season_avg_toi, season_faceoff_pct, last5_games, last5_goals, last5_points, last5_shots, is_locked, board_group_id, nhl_player_id, board_groups (label, sort_order)"
+    )
+    .order("sort_order", { foreignTable: "board_groups" });
+
+  if (picksError) {
+    return res.status(500).json({ error: formatSchemaError(picksError) });
+  }
+
+  return res.json({
+    board: lockedBoard,
+    picks: lockedPicks ?? [],
   });
 });
 

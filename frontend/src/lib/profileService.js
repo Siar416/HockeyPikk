@@ -21,3 +21,24 @@ export const fetchProfile = async ({ accessToken }) => {
 
   return { data: payload, error: null };
 };
+
+export const updateProfile = async ({ accessToken, displayName }) => {
+  const response = await fetch(`${API_BASE}/profile/me`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      displayName,
+    }),
+  });
+
+  const payload = await parseJson(response);
+
+  if (!response.ok) {
+    return { data: null, error: new Error(payload?.error || "Request failed.") };
+  }
+
+  return { data: payload, error: null };
+};

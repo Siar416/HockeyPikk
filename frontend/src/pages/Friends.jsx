@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import GroupPickCard from "../components/GroupPickCard";
 import { getTodayDateKey } from "../lib/boardService";
+import { createComment, fetchComments } from "../lib/commentsService";
 import { fetchFriendBoard } from "../lib/friendBoardsService";
 import {
   fetchFriends,
@@ -18,6 +19,24 @@ const mapPickRows = (rows = []) =>
       playerName: pick.player_name,
       teamCode: pick.team_code,
       teamName: pick.team_name,
+      opponentTeamCode: pick.opponent_team_code,
+      opponentTeamName: pick.opponent_team_name,
+      position: pick.position,
+      line: pick.line,
+      ppLine: pick.pp_line,
+      seasonGamesPlayed: pick.season_games_played,
+      seasonGoals: pick.season_goals,
+      seasonAssists: pick.season_assists,
+      seasonPoints: pick.season_points,
+      seasonShots: pick.season_shots,
+      seasonPowerPlayPoints: pick.season_pp_points,
+      seasonShootingPct: pick.season_shooting_pct,
+      seasonAvgToi: pick.season_avg_toi,
+      seasonFaceoffPct: pick.season_faceoff_pct,
+      last5Games: pick.last5_games,
+      last5Goals: pick.last5_goals,
+      last5Points: pick.last5_points,
+      last5Shots: pick.last5_shots,
       isLocked: pick.is_locked,
       sortOrder: pick.board_groups?.sort_order ?? 0,
       boardGroupId: pick.board_group_id,
@@ -25,13 +44,37 @@ const mapPickRows = (rows = []) =>
     }))
     .sort((a, b) => a.sortOrder - b.sortOrder);
 
+const COMMENTS_PAGE_SIZE = 5;
+
+const formatLineMeta = (value) => {
+  if (value === null || value === undefined || value === "") return "";
+  const raw = String(value).trim();
+  if (!raw) return "";
+  const upper = raw.toUpperCase();
+  if (/^\d+$/.test(upper)) return `L${upper}`;
+  if (upper.startsWith("L") || upper.startsWith("F") || upper.startsWith("D")) {
+    return upper;
+  }
+  return `L${upper}`;
+};
+
+const formatPpMeta = (value) => {
+  if (value === null || value === undefined || value === "") return "";
+  const raw = String(value).trim();
+  if (!raw) return "";
+  const upper = raw.toUpperCase();
+  if (/^\d+$/.test(upper)) return `PP${upper}`;
+  if (upper.startsWith("PP")) return upper;
+  return `PP${upper}`;
+};
+
 export default function Friends({ session, onRequestsCount }) {
   const [friends, setFriends] = useState([]);
   const [requests, setRequests] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [isInviteOpen, setIsInviteOpen] = useState(false);
-  const [inviteHandle, setInviteHandle] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
   const [inviteError, setInviteError] = useState("");
   const [inviteNotice, setInviteNotice] = useState("");
   const [isInviting, setIsInviting] = useState(false);
@@ -49,10 +92,22 @@ export default function Friends({ session, onRequestsCount }) {
   const [suggestionReason, setSuggestionReason] = useState("");
   const [suggestionError, setSuggestionError] = useState("");
   const [suggestionSaving, setSuggestionSaving] = useState(false);
+  const [comments, setComments] = useState([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentsError, setCommentsError] = useState("");
+  const [commentBody, setCommentBody] = useState("");
+  const [commentFormError, setCommentFormError] = useState("");
+  const [commentSaving, setCommentSaving] = useState(false);
+  const [commentLimit, setCommentLimit] = useState(COMMENTS_PAGE_SIZE);
+  const [replyTargetId, setReplyTargetId] = useState(null);
+  const [replyBody, setReplyBody] = useState("");
+  const [replySaving, setReplySaving] = useState(false);
+  const [replyError, setReplyError] = useState("");
   const [pickOptions, setPickOptions] = useState(null);
   const [optionsLoading, setOptionsLoading] = useState(false);
   const [optionsError, setOptionsError] = useState("");
   const accessToken = session?.access_token;
+  const userId = session?.user?.id;
 
   const friendGroups = useMemo(() => {
     const groups = friendBoard?.board_groups ?? [];
@@ -205,7 +260,61 @@ export default function Friends({ session, onRequestsCount }) {
     setSuggestionPlayerId("");
     setSuggestionReason("");
     setSuggestionError("");
+    setComments([]);
+    setCommentsError("");
+    setCommentBody("");
+    setCommentFormError("");
+    setCommentSaving(false);
+    setCommentLimit(COMMENTS_PAGE_SIZE);
+    setReplyTargetId(null);
+    setReplyBody("");
+    setReplySaving(false);
+    setReplyError("");
   }, [selectedFriendId]);
+
+  useEffect(() => {
+    if (friendBoard?.id) {
+      setCommentLimit(COMMENTS_PAGE_SIZE);
+    }
+  }, [friendBoard?.id]);
+
+  useEffect(() => {
+    if (!accessToken || !friendBoard?.id) {
+      setComments([]);
+      setCommentsError("");
+      setCommentsLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadComments = async () => {
+      setCommentsLoading(true);
+      setCommentsError("");
+
+      const { data, error } = await fetchComments({
+        accessToken,
+        boardId: friendBoard.id,
+      });
+
+      if (!isMounted) return;
+
+      if (error) {
+        setCommentsError(error.message);
+        setCommentsLoading(false);
+        return;
+      }
+
+      setComments(data?.comments ?? []);
+      setCommentsLoading(false);
+    };
+
+    loadComments();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [accessToken, friendBoard?.id]);
 
   const reloadFriends = async () => {
     if (!accessToken) return;
@@ -250,16 +359,16 @@ export default function Friends({ session, onRequestsCount }) {
     setInviteError("");
     setInviteNotice("");
 
-    const trimmedHandle = inviteHandle.trim();
-    if (!trimmedHandle) {
-      setInviteError("Enter a handle or email to invite.");
+    const trimmedEmail = inviteEmail.trim();
+    if (!trimmedEmail) {
+      setInviteError("Enter an email to invite.");
       return;
     }
 
     setIsInviting(true);
     const { error } = await sendFriendRequest({
       accessToken,
-      handle: trimmedHandle,
+      email: trimmedEmail,
     });
 
     if (error) {
@@ -268,7 +377,7 @@ export default function Friends({ session, onRequestsCount }) {
       return;
     }
 
-    setInviteHandle("");
+    setInviteEmail("");
     setInviteNotice("Invite sent.");
     setIsInviting(false);
     reloadFriends();
@@ -318,9 +427,58 @@ export default function Friends({ session, onRequestsCount }) {
   const activeGroupPick = activeSuggestionGroup
     ? friendPickByGroup.get(activeSuggestionGroup.id)
     : null;
+  const canSuggestFriend = Boolean(
+    accessToken && friendBoard && friendBoard.status !== "locked"
+  );
+  const { topLevelComments, repliesByParent } = useMemo(() => {
+    const topLevel = [];
+    const repliesMap = new Map();
+    const threadActivity = new Map();
+
+    comments.forEach((comment) => {
+      const createdAt = new Date(comment.createdAt).getTime();
+      if (comment.parentId) {
+        if (!repliesMap.has(comment.parentId)) {
+          repliesMap.set(comment.parentId, []);
+        }
+        repliesMap.get(comment.parentId).push(comment);
+        const current = threadActivity.get(comment.parentId) || 0;
+        if (createdAt > current) {
+          threadActivity.set(comment.parentId, createdAt);
+        }
+        return;
+      }
+      topLevel.push(comment);
+      const current = threadActivity.get(comment.id) || 0;
+      if (createdAt > current) {
+        threadActivity.set(comment.id, createdAt);
+      }
+    });
+
+    repliesMap.forEach((list) =>
+      list.sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      )
+    );
+    topLevel.sort((a, b) => {
+      const aTime = threadActivity.get(a.id) || 0;
+      const bTime = threadActivity.get(b.id) || 0;
+      return bTime - aTime;
+    });
+
+    return { topLevelComments: topLevel, repliesByParent: repliesMap };
+  }, [comments]);
+  const hasMoreComments = topLevelComments.length > commentLimit;
+  const commentsToShow = topLevelComments.slice(0, commentLimit);
+
+  useEffect(() => {
+    if (!canSuggestFriend && isSuggesting) {
+      setIsSuggesting(false);
+    }
+  }, [canSuggestFriend, isSuggesting]);
 
   const handleFriendSuggest = (groupId) => {
-    if (!friendBoard) return;
+    if (!friendBoard || !canSuggestFriend) return;
     setSuggestionGroupId(groupId || friendGroups[0]?.id || "");
     setSuggestionPlayerId("");
     setSuggestionReason("");
@@ -333,6 +491,10 @@ export default function Friends({ session, onRequestsCount }) {
     event.preventDefault();
     if (!friendBoard?.id || !suggestionGroupId || !suggestionPlayerId) {
       setSuggestionError("Select a group and player.");
+      return;
+    }
+    if (!canSuggestFriend) {
+      setSuggestionError("Suggestions are closed for this board.");
       return;
     }
 
@@ -364,6 +526,62 @@ export default function Friends({ session, onRequestsCount }) {
     setSuggestionPlayerId("");
     setSuggestionReason("");
     setSuggestionError("");
+  };
+
+  const handleCommentSubmit = async (event) => {
+    event.preventDefault();
+    if (!accessToken || !friendBoard?.id || !commentBody.trim()) return;
+    setCommentSaving(true);
+    setCommentFormError("");
+
+    const { data, error } = await createComment({
+      accessToken,
+      boardId: friendBoard.id,
+      body: commentBody.trim(),
+    });
+
+    if (error) {
+      setCommentFormError(error.message);
+      setCommentSaving(false);
+      return;
+    }
+
+    const newComment = data?.comment;
+    if (newComment) {
+      setComments((prev) => [newComment, ...prev]);
+    }
+
+    setCommentBody("");
+    setCommentSaving(false);
+  };
+
+  const handleReplySubmit = async (event, parentId) => {
+    event.preventDefault();
+    if (!accessToken || !friendBoard?.id || !parentId || !replyBody.trim()) return;
+    setReplySaving(true);
+    setReplyError("");
+
+    const { data, error } = await createComment({
+      accessToken,
+      boardId: friendBoard.id,
+      body: replyBody.trim(),
+      parentId,
+    });
+
+    if (error) {
+      setReplyError(error.message);
+      setReplySaving(false);
+      return;
+    }
+
+    const newReply = data?.comment;
+    if (newReply) {
+      setComments((prev) => [newReply, ...prev]);
+    }
+
+    setReplyBody("");
+    setReplyTargetId(null);
+    setReplySaving(false);
   };
 
   const renderEmptyState = (message) => (
@@ -408,13 +626,13 @@ export default function Friends({ session, onRequestsCount }) {
               onSubmit={handleInviteSubmit}
             >
               <label className="text-[10px] uppercase tracking-[0.28em] text-[color:var(--muted)]">
-                Handle or email
+                Email
               </label>
               <div className="mt-2 flex flex-col gap-2 sm:flex-row">
                 <input
-                  value={inviteHandle}
-                  onChange={(event) => setInviteHandle(event.target.value)}
-                  placeholder="@username or name@email.com"
+                  value={inviteEmail}
+                  onChange={(event) => setInviteEmail(event.target.value)}
+                  placeholder="name@email.com"
                   className="flex-1 rounded-2xl border border-white/80 bg-white/90 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-white/80"
                 />
                 <button
@@ -451,13 +669,20 @@ export default function Friends({ session, onRequestsCount }) {
                         {friends.map((friend) => (
                           <div
                             key={friend.id}
-                            className="rounded-2xl border border-white/80 bg-white/70 px-4 py-3"
+                            className="flex items-center justify-between rounded-2xl border border-white/80 bg-white/70 px-4 py-3 shadow-sm"
                           >
-                            <div className="text-sm font-semibold">
-                              {friend.displayName}
-                            </div>
-                            <div className="text-xs text-[color:var(--muted)]">
-                              {friend.handle ? `@${friend.handle}` : "@"}
+                            <div className="flex items-center gap-3">
+                              <div className="grid h-10 w-10 place-items-center rounded-2xl border border-white/80 bg-[linear-gradient(135deg,_rgba(255,255,255,0.95),_rgba(225,238,255,0.85))] text-sm font-semibold text-[color:var(--ink)]">
+                                {(friend.displayName || "Friend")
+                                  .trim()
+                                  .slice(0, 1)
+                                  .toUpperCase()}
+                              </div>
+                              <div>
+                                <div className="text-sm font-semibold text-[color:var(--ink)]">
+                                  {friend.displayName}
+                                </div>
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -491,15 +716,20 @@ export default function Friends({ session, onRequestsCount }) {
                         {requests.map((request) => (
                           <div
                             key={request.id}
-                            className="rounded-2xl border border-white/80 bg-white/70 px-4 py-3"
+                            className="rounded-2xl border border-white/80 bg-white/70 px-4 py-3 shadow-sm"
                           >
                             <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <div className="text-sm font-semibold">
-                                  {request.displayName}
+                              <div className="flex items-center gap-3">
+                                <div className="grid h-10 w-10 place-items-center rounded-2xl border border-white/80 bg-[linear-gradient(135deg,_rgba(255,255,255,0.95),_rgba(225,238,255,0.85))] text-sm font-semibold text-[color:var(--ink)]">
+                                  {(request.displayName || "Friend")
+                                    .trim()
+                                    .slice(0, 1)
+                                    .toUpperCase()}
                                 </div>
-                                <div className="text-xs text-[color:var(--muted)]">
-                                  {request.handle ? `@${request.handle}` : "@"}
+                                <div>
+                                  <div className="text-sm font-semibold text-[color:var(--ink)]">
+                                    {request.displayName}
+                                  </div>
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">
@@ -548,7 +778,6 @@ export default function Friends({ session, onRequestsCount }) {
           {friendProfile ? (
             <div className="text-xs text-[color:var(--muted)]">
               Viewing {friendProfile.displayName}
-              {friendProfile.handle ? ` (@${friendProfile.handle})` : ""}
             </div>
           ) : null}
         </div>
@@ -568,7 +797,6 @@ export default function Friends({ session, onRequestsCount }) {
                       {friends.map((friend) => (
                         <option key={friend.id} value={friend.id}>
                           {friend.displayName}
-                          {friend.handle ? ` (@${friend.handle})` : ""}
                         </option>
                       ))}
                     </select>
@@ -590,7 +818,7 @@ export default function Friends({ session, onRequestsCount }) {
                         ? renderEmptyState("No board yet for today.")
                         : (
                             <div className="space-y-4">
-                              <div className="grid gap-3 md:grid-cols-2">
+                              <div className="space-y-4">
                                 {friendGroups.map((group) => {
                                   const pick = friendPickByGroup.get(group.id);
                                   const cardData = pick || {
@@ -605,7 +833,11 @@ export default function Friends({ session, onRequestsCount }) {
                                     <GroupPickCard
                                       key={group.id}
                                       {...cardData}
-                                      onSuggest={() => handleFriendSuggest(group.id)}
+                                      onSuggest={
+                                        canSuggestFriend
+                                          ? () => handleFriendSuggest(group.id)
+                                          : undefined
+                                      }
                                     />
                                   );
                                 })}
@@ -667,8 +899,10 @@ export default function Friends({ session, onRequestsCount }) {
                                             parts.push(`vs ${player.opponentTeam}`);
                                           }
                                           if (player.position) parts.push(player.position);
-                                          if (player.line) parts.push(`L${player.line}`);
-                                          if (player.ppLine) parts.push(`PP${player.ppLine}`);
+                                          const lineLabel = formatLineMeta(player.line);
+                                          if (lineLabel) parts.push(lineLabel);
+                                          const ppLabel = formatPpMeta(player.ppLine);
+                                          if (ppLabel) parts.push(ppLabel);
                                           const meta = parts.length
                                             ? ` - ${parts.join(" | ")}`
                                             : "";
@@ -739,6 +973,234 @@ export default function Friends({ session, onRequestsCount }) {
                           )}
                 </div>
               )}
+      </section>
+
+      <section className="glass-card rounded-3xl p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="font-display text-2xl uppercase">Comments</h2>
+          <span className="text-xs text-[color:var(--muted)]">
+            {comments.length}
+          </span>
+        </div>
+
+        {!accessToken
+          ? renderEmptyState("Sign in to view comments.")
+          : friends.length === 0
+            ? renderEmptyState("Add a friend to view comments.")
+            : friendLoading
+              ? renderEmptyState("Loading comments...")
+              : friendError
+                ? renderEmptyState(friendError)
+                : !friendBoard
+                  ? renderEmptyState("No board yet for today.")
+                  : commentsLoading
+                    ? renderEmptyState("Loading comments...")
+                    : commentsError
+                      ? renderEmptyState(commentsError)
+                      : comments.length === 0
+                        ? renderEmptyState("No comments yet.")
+                        : (
+                            <div className="space-y-2">
+                              {commentsToShow.map((comment) => {
+                                const replies = repliesByParent.get(comment.id) || [];
+                                const isMine = comment.userId === userId;
+                                const displayName =
+                                  comment.displayName || (isMine ? "You" : "Friend");
+                                const commentCardStyles = isMine
+                                  ? "border border-[rgba(42,157,244,0.35)] border-l-4 border-l-[rgba(42,157,244,0.85)] bg-[linear-gradient(135deg,_rgba(42,157,244,0.12),_rgba(255,255,255,0.85))]"
+                                  : "border border-[rgba(16,185,129,0.28)] border-l-4 border-l-[rgba(16,185,129,0.75)] bg-[linear-gradient(135deg,_rgba(16,185,129,0.08),_rgba(255,255,255,0.9))]";
+                                return (
+                                  <div key={comment.id} className="space-y-2">
+                                    <div className={`rounded-2xl px-4 py-3 ${commentCardStyles}`}>
+                                      <div className="flex items-center justify-between text-xs text-[color:var(--muted)]">
+                                        <span className="flex items-center gap-2">
+                                          <span className="font-semibold text-[color:var(--ink)]">
+                                            {displayName}
+                                          </span>
+                                          <span
+                                            className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.2em] text-[color:var(--ink)] ${
+                                              isMine
+                                                ? "border-[rgba(42,157,244,0.35)] bg-[rgba(42,157,244,0.12)]"
+                                                : "border-[rgba(16,185,129,0.35)] bg-[rgba(16,185,129,0.12)]"
+                                            }`}
+                                          >
+                                            {isMine ? "You" : "Friend"}
+                                          </span>
+                                        </span>
+                                        <span>
+                                          {new Date(comment.createdAt).toLocaleString(
+                                            "en-US",
+                                            {
+                                              month: "short",
+                                              day: "numeric",
+                                              hour: "numeric",
+                                              minute: "2-digit",
+                                            }
+                                          )}
+                                        </span>
+                                      </div>
+                                      <div className="mt-2 text-sm text-[color:var(--ink)]">
+                                        {comment.body}
+                                      </div>
+                                      {accessToken ? (
+                                        <div className="mt-3 flex items-center gap-2">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setReplyTargetId(
+                                                replyTargetId === comment.id
+                                                  ? null
+                                                  : comment.id
+                                              );
+                                              setReplyBody("");
+                                              setReplyError("");
+                                            }}
+                                            className="rounded-full border border-white/80 bg-white/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-[color:var(--ink)] shadow-sm"
+                                          >
+                                            Reply
+                                          </button>
+                                        </div>
+                                      ) : null}
+                                    </div>
+
+                                    {replies.length ? (
+                                      <div className="space-y-2 pl-6">
+                                        {replies.map((reply) => {
+                                          const replyIsMine = reply.userId === userId;
+                                          const replyName =
+                                            reply.displayName ||
+                                            (replyIsMine ? "You" : "Friend");
+                                          const replyStyles = replyIsMine
+                                            ? "border border-[rgba(42,157,244,0.3)] border-l-4 border-l-[rgba(42,157,244,0.7)] bg-[rgba(42,157,244,0.08)]"
+                                            : "border border-[rgba(16,185,129,0.22)] border-l-4 border-l-[rgba(16,185,129,0.6)] bg-[rgba(16,185,129,0.06)]";
+                                          return (
+                                            <div
+                                              key={reply.id}
+                                              className={`rounded-2xl px-4 py-3 ${replyStyles}`}
+                                            >
+                                              <div className="flex items-center justify-between text-xs text-[color:var(--muted)]">
+                                                <span className="flex items-center gap-2">
+                                                  <span className="font-semibold text-[color:var(--ink)]">
+                                                    {replyName}
+                                                  </span>
+                                                  <span
+                                                    className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.2em] text-[color:var(--ink)] ${
+                                                      replyIsMine
+                                                        ? "border-[rgba(42,157,244,0.35)] bg-[rgba(42,157,244,0.12)]"
+                                                        : "border-[rgba(16,185,129,0.35)] bg-[rgba(16,185,129,0.12)]"
+                                                    }`}
+                                                  >
+                                                    {replyIsMine ? "You" : "Friend"}
+                                                  </span>
+                                                </span>
+                                                <span>
+                                                  {new Date(reply.createdAt).toLocaleString(
+                                                    "en-US",
+                                                    {
+                                                      month: "short",
+                                                      day: "numeric",
+                                                      hour: "numeric",
+                                                      minute: "2-digit",
+                                                    }
+                                                  )}
+                                                </span>
+                                              </div>
+                                              <div className="mt-2 text-sm text-[color:var(--ink)]">
+                                                {reply.body}
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    ) : null}
+
+                                    {replyTargetId === comment.id ? (
+                                      <form
+                                        onSubmit={(event) =>
+                                          handleReplySubmit(event, comment.id)
+                                        }
+                                        className="space-y-2 pl-6"
+                                      >
+                                        <textarea
+                                          value={replyBody}
+                                          onChange={(event) =>
+                                            setReplyBody(event.target.value)
+                                          }
+                                          className="w-full rounded-2xl border border-white/80 bg-white/80 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-white/80"
+                                          placeholder="Write a reply..."
+                                          rows={2}
+                                          disabled={replySaving}
+                                        />
+                                        <div className="flex items-center gap-2">
+                                          <button
+                                            type="submit"
+                                            disabled={replySaving || !replyBody.trim()}
+                                            className="rounded-2xl bg-[linear-gradient(135deg,_#0b1424,_#1f3a60)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-white shadow-[0_12px_26px_rgba(15,23,42,0.25)] disabled:cursor-not-allowed disabled:opacity-60"
+                                          >
+                                            {replySaving ? "Sending..." : "Reply"}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setReplyTargetId(null);
+                                              setReplyBody("");
+                                              setReplyError("");
+                                            }}
+                                            className="rounded-2xl border border-white/80 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)]"
+                                          >
+                                            Cancel
+                                          </button>
+                                        </div>
+                                        {replyError ? (
+                                          <div className="text-xs text-[color:var(--accent)]">
+                                            {replyError}
+                                          </div>
+                                        ) : null}
+                                      </form>
+                                    ) : null}
+                                  </div>
+                                );
+                              })}
+                              {hasMoreComments ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setCommentLimit((prev) => prev + COMMENTS_PAGE_SIZE)
+                                  }
+                                  className="w-full rounded-2xl border border-white/80 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)] shadow-sm"
+                                >
+                                  Show more comments
+                                </button>
+                              ) : null}
+                            </div>
+                          )}
+
+        {accessToken && friendBoard ? (
+          <form onSubmit={handleCommentSubmit} className="space-y-2">
+            <textarea
+              value={commentBody}
+              onChange={(event) => setCommentBody(event.target.value)}
+              className="w-full rounded-2xl border border-white/80 bg-white/80 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-white/80"
+              placeholder="Write a comment..."
+              rows={2}
+              disabled={commentSaving}
+            />
+            <div className="flex items-center gap-2">
+              <button
+                type="submit"
+                disabled={commentSaving || !commentBody.trim()}
+                className="rounded-2xl bg-[linear-gradient(135deg,_#0f172a,_#1d4ed8)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-white shadow-[0_12px_26px_rgba(15,23,42,0.25)] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {commentSaving ? "Sending..." : "Send"}
+              </button>
+            </div>
+            {commentFormError ? (
+              <div className="text-xs text-[color:var(--accent)]">
+                {commentFormError}
+              </div>
+            ) : null}
+          </form>
+        ) : null}
       </section>
     </div>
   );

@@ -22,14 +22,14 @@ export const fetchFriends = async ({ accessToken }) => {
   return { data: payload, error: null };
 };
 
-export const sendFriendRequest = async ({ accessToken, handle }) => {
+export const sendFriendRequest = async ({ accessToken, email }) => {
   const response = await fetch(`${API_BASE}/friends/requests`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ handle }),
+    body: JSON.stringify({ email }),
   });
 
   const payload = await parseJson(response);

@@ -23,14 +23,14 @@ export const fetchComments = async ({ accessToken, boardId }) => {
   return { data: payload, error: null };
 };
 
-export const createComment = async ({ accessToken, boardId, body }) => {
+export const createComment = async ({ accessToken, boardId, body, parentId }) => {
   const response = await fetch(`${API_BASE}/comments`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ boardId, body }),
+    body: JSON.stringify({ boardId, body, parentId }),
   });
 
   const payload = await parseJson(response);
