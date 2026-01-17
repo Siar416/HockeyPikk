@@ -77,6 +77,9 @@ create table if not exists public.picks (
   last5_goals int,
   last5_points int,
   last5_shots int,
+  game_goals int,
+  game_played boolean,
+  game_updated_at timestamptz,
   is_locked boolean not null default false,
   created_at timestamptz not null default now(),
   unique (board_group_id, user_id)
@@ -138,6 +141,15 @@ alter table public.picks
 
 alter table public.picks
   add column if not exists last5_shots int;
+
+alter table public.picks
+  add column if not exists game_goals int;
+
+alter table public.picks
+  add column if not exists game_played boolean;
+
+alter table public.picks
+  add column if not exists game_updated_at timestamptz;
 
 do $$
 begin

@@ -2,7 +2,8 @@ const express = require("express");
 const requireSupabase = require("../middleware/requireSupabase");
 const requireAuth = require("../middleware/requireAuth");
 const { getPicks } = require("../lib/hockeyChallengeClient");
-const { getPlayerStats } = require("../lib/nhlStatsClient");
+const { getPlayerStats, getTeamRecordVsOpponent } = require("../lib/nhlStatsClient");
+const { getSeasonIdForDate } = require("../lib/seasonUtils");
 const { getTeamName } = require("../lib/teamNames");
 
 const router = express.Router();
@@ -50,7 +51,7 @@ const buildStatsColumns = (stats) => ({
 const getBoard = async (supabase, { boardId }) =>
   supabase
     .from("boards")
-    .select("id, created_by, status")
+    .select("id, created_by, status, board_date")
     .eq("id", boardId)
     .maybeSingle()
     .then(({ data, error }) => ({ data, error }));
@@ -387,6 +388,9 @@ router.patch("/:id", requireSupabase, requireAuth, async (req, res) => {
           position,
           line,
           pp_line: ppLine,
+          game_goals: null,
+          game_played: null,
+          game_updated_at: null,
           is_locked: false,
           ...buildStatsColumns(stats),
         },
@@ -401,7 +405,18 @@ router.patch("/:id", requireSupabase, requireAuth, async (req, res) => {
       return res.status(500).json({ error: formatSchemaError(pickError) });
     }
 
-    pickRow = savedPick;
+    if (savedPick) {
+      const seasonId = getSeasonIdForDate(board?.board_date);
+      const opponentRecord = await getTeamRecordVsOpponent({
+        teamCode: savedPick.team_code,
+        opponentCode: savedPick.opponent_team_code,
+        seasonId,
+      });
+      pickRow = {
+        ...savedPick,
+        opponent_record: opponentRecord,
+      };
+    }
   }
 
   const { data: updated, error: updateError } = await supabase

@@ -1,6 +1,8 @@
 const express = require("express");
 const requireSupabase = require("../middleware/requireSupabase");
 const requireAuth = require("../middleware/requireAuth");
+const { getTeamRecordVsOpponent } = require("../lib/nhlStatsClient");
+const { getSeasonIdForDate } = require("../lib/seasonUtils");
 
 const router = express.Router();
 
@@ -431,13 +433,38 @@ router.get("/:friendId/board", requireSupabase, requireAuth, async (req, res) =>
     return res.status(500).json({ error: formatSchemaError(picksError) });
   }
 
+  const seasonId = getSeasonIdForDate(board.board_date);
+  const recordCache = new Map();
+  const resolveRecord = async (teamCode, opponentCode) => {
+    if (!seasonId || !teamCode || !opponentCode) return null;
+    const cacheKey = `${teamCode}-${opponentCode}-${seasonId}`;
+    if (recordCache.has(cacheKey)) return recordCache.get(cacheKey);
+    const record = await getTeamRecordVsOpponent({
+      teamCode,
+      opponentCode,
+      seasonId,
+    });
+    recordCache.set(cacheKey, record);
+    return record;
+  };
+
+  const picksWithRecords = await Promise.all(
+    (picks ?? []).map(async (pick) => ({
+      ...pick,
+      opponent_record: await resolveRecord(
+        pick.team_code,
+        pick.opponent_team_code
+      ),
+    }))
+  );
+
   return res.json({
     friend: {
       id: friendId,
       displayName: friendProfile?.display_name || "Unknown",
     },
     board,
-    picks: picks ?? [],
+    picks: picksWithRecords,
   });
 });
 

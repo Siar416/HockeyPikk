@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import GroupPickCard from "../components/GroupPickCard";
 import { fetchTodayBoard, getTodayDateKey, lockBoard } from "../lib/boardService";
 import { createComment, fetchComments } from "../lib/commentsService";
-import { fetchPickOptions, savePicks } from "../lib/picksService";
+import { fetchPickMeta, fetchPickOptions, savePicks } from "../lib/picksService";
 import {
   createSuggestion,
   fetchSuggestions,
@@ -91,6 +91,7 @@ const mapPickRows = (rows = []) =>
       teamName: pick.team_name,
       opponentTeamCode: pick.opponent_team_code,
       opponentTeamName: pick.opponent_team_name,
+      opponentRecord: pick.opponent_record,
       position: pick.position,
       line: pick.line,
       ppLine: pick.pp_line,
@@ -134,6 +135,16 @@ const formatTimestamp = (value) => {
   return date.toLocaleString("en-US", {
     month: "short",
     day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+};
+
+const formatTimeLabel = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
   });
@@ -214,6 +225,7 @@ export default function Today({
   const [replyBody, setReplyBody] = useState("");
   const [replySaving, setReplySaving] = useState(false);
   const [replyError, setReplyError] = useState("");
+  const [lockByLabel, setLockByLabel] = useState(null);
   const userId = session?.user?.id;
   const accessToken = session?.access_token;
   const hasBackend = Boolean(userId && accessToken);
@@ -295,6 +307,27 @@ export default function Today({
       isMounted = false;
     };
   }, [accessToken, hasBackend, userId]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadLockMeta = async () => {
+      const dateKey = board?.board_date || getTodayDateKey();
+      const { data } = await fetchPickMeta({ dateKey });
+      if (!isMounted) return;
+      const resolvedLabel =
+        formatTimeLabel(data?.lockTime) ||
+        data?.lockTimeLabel ||
+        formatTimeLabel(data?.dateTimeAvailable);
+      setLockByLabel(resolvedLabel);
+    };
+
+    loadLockMeta();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [board?.board_date]);
 
   useEffect(() => {
     const shouldLoadOptions = isEditing || isSuggesting;
@@ -462,12 +495,8 @@ export default function Today({
   const statusPillStyles = isLocked
     ? "border border-[rgba(240,78,78,0.35)] bg-[linear-gradient(135deg,_rgba(240,78,78,0.18),_rgba(255,180,120,0.24))] text-[color:var(--accent)]"
     : "border border-[rgba(42,157,244,0.35)] bg-[linear-gradient(135deg,_rgba(42,157,244,0.18),_rgba(129,212,250,0.22))] text-[color:var(--ink)]";
-  const lockTimeLabel = board?.lock_at
-    ? new Date(board.lock_at).toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-      })
-    : "7:00 PM";
+  const lockedAtLabel = formatTimeLabel(board?.lock_at);
+  const lockTimeLabel = lockByLabel || formatTimeLabel(board?.lock_at) || "7:00 PM";
   const groupCount = hasBackend ? orderedGroups.length : samplePicks.length;
   const selectedCount = useMemo(() => {
     if (!hasBackend) return samplePicks.length;
@@ -863,9 +892,15 @@ export default function Today({
           <span className="rounded-full border border-white/70 bg-white/85 px-3 py-1 shadow-sm">
             {counts.comments} comments
           </span>
-          <span className="rounded-full border border-white/70 bg-white/85 px-3 py-1 shadow-sm">
-            Lock by {lockTimeLabel}
-          </span>
+          {isLocked ? (
+            <span className="rounded-full border border-white/70 bg-white/85 px-3 py-1 shadow-sm">
+              Picks were locked in {lockedAtLabel ? `at ${lockedAtLabel}` : ""}
+            </span>
+          ) : (
+            <span className="rounded-full border border-white/70 bg-white/85 px-3 py-1 shadow-sm">
+              Lock by {lockTimeLabel}
+            </span>
+          )}
         </div>
 
         {hasBackend && loadError ? (

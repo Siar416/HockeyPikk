@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchProfile, updateProfile } from "../lib/profileService";
 
-export default function Profile({ session, onProfileUpdate }) {
+export default function Profile({ session, onProfileUpdate, onAuthExit, isGuest }) {
   const [profile, setProfile] = useState(null);
   const [stats, setStats] = useState({ wins: 0, streak: 0, accuracy: 0 });
   const [isLoading, setIsLoading] = useState(false);
@@ -11,6 +11,8 @@ export default function Profile({ session, onProfileUpdate }) {
   const [saveError, setSaveError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const accessToken = session?.access_token;
+  const canEdit = Boolean(accessToken);
+  const authActionLabel = isGuest ? "Sign in" : "Log out";
 
   useEffect(() => {
     if (!accessToken) {
@@ -139,35 +141,59 @@ export default function Profile({ session, onProfileUpdate }) {
               ) : null}
             </div>
           </div>
-          {isEditing ? (
-            <div className="flex items-center gap-2">
-              <button
-                type="submit"
-                form="profile-edit"
-                disabled={isSaving}
-                className="rounded-full bg-[linear-gradient(135deg,_#0f172a,_#1d4ed8)] px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-white shadow-[0_12px_26px_rgba(15,23,42,0.25)] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {isSaving ? "Saving..." : "Save"}
-              </button>
+          <div className="flex items-center gap-2">
+            {isEditing ? (
+              <>
+                <button
+                  type="submit"
+                  form="profile-edit"
+                  disabled={isSaving}
+                  className="rounded-full bg-[linear-gradient(135deg,_#0f172a,_#1d4ed8)] px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-white shadow-[0_12px_26px_rgba(15,23,42,0.25)] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSaving ? "Saving..." : "Save"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  className="rounded-full border border-white/70 bg-white/70 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)] shadow-sm hover:bg-white"
+                >
+                  Cancel
+                </button>
+              </>
+            ) : canEdit ? (
+              <>
+                <button
+                  type="button"
+                  onClick={handleEditToggle}
+                  className="rounded-full border border-white/70 bg-white/70 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)] shadow-sm hover:bg-white"
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onAuthExit?.()}
+                  className="rounded-full border border-white/70 bg-white/70 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)] shadow-sm hover:bg-white"
+                >
+                  {authActionLabel}
+                </button>
+              </>
+            ) : (
               <button
                 type="button"
-                onClick={handleCancelEdit}
+                onClick={() => onAuthExit?.()}
                 className="rounded-full border border-white/70 bg-white/70 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)] shadow-sm hover:bg-white"
               >
-                Cancel
+                {authActionLabel}
               </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={handleEditToggle}
-              disabled={!accessToken}
-              className="rounded-full border border-white/70 bg-white/70 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)] shadow-sm hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Edit
-            </button>
-          )}
+            )}
+          </div>
         </div>
+        {!accessToken ? (
+          <div className="mt-3 rounded-2xl border border-[rgba(42,157,244,0.2)] bg-[rgba(42,157,244,0.08)] px-3 py-2 text-xs text-[color:var(--ink)]">
+            You&apos;re viewing as a guest. Sign in to save your profile and
+            history.
+          </div>
+        ) : null}
         {isEditing ? (
           <form id="profile-edit" onSubmit={handleProfileSave} className="mt-4">
             <div className="space-y-2">

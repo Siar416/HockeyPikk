@@ -77,6 +77,19 @@ const formatRate = (value, games) => {
   return (num / gp).toFixed(2);
 };
 
+const formatOpponentRecord = (record) => {
+  if (!record || typeof record !== "object") return null;
+  const wins = Number(record.wins);
+  const losses = Number(record.losses);
+  const otLosses = Number(record.otLosses);
+  if (!Number.isFinite(wins) || !Number.isFinite(losses) || !Number.isFinite(otLosses)) {
+    return null;
+  }
+  const total = wins + losses + otLosses;
+  if (total <= 0) return null;
+  return `${wins}-${losses}-${otLosses}`;
+};
+
 export default function GroupPickCard({
   groupLabel,
   playerName,
@@ -84,6 +97,7 @@ export default function GroupPickCard({
   teamName,
   opponentTeamCode,
   opponentTeamName,
+  opponentRecord,
   position,
   line,
   ppLine,
@@ -107,6 +121,7 @@ export default function GroupPickCard({
   const statusLabel = isLocked ? "Locked" : "Draft";
   const matchupTeam = teamCode || teamName || "";
   const opponentLabel = opponentTeamCode || opponentTeamName || "";
+  const opponentShort = opponentTeamCode || opponentTeamName || "Opponent";
   const matchupLabel =
     matchupTeam && opponentLabel ? `${matchupTeam} vs ${opponentLabel}` : "";
   const statPills = [];
@@ -135,7 +150,7 @@ export default function GroupPickCard({
     seasonSummaryParts.push(`GP ${gpValue}`);
   }
 
-  const seasonSummary = seasonSummaryParts.join(" • ");
+  const seasonSummary = seasonSummaryParts.join(" | ");
   const seasonStats = [
     {
       label: pointsRate ? "PTS/GP" : "PTS",
@@ -153,6 +168,13 @@ export default function GroupPickCard({
     { label: "TOI", value: seasonAvgToi || null },
     { label: "FO%", value: formatPct(seasonFaceoffPct) },
   ].filter((stat) => stat.value !== null);
+  const opponentRecordLabel = formatOpponentRecord(opponentRecord);
+  if (opponentRecordLabel) {
+    seasonStats.push({
+      label: `H2H vs ${opponentShort}`,
+      value: opponentRecordLabel,
+    });
+  }
   const formStats = [
     { label: "L5 PTS", value: formatCount(last5Points) },
     { label: "L5 G", value: formatCount(last5Goals) },

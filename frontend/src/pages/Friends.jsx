@@ -21,6 +21,7 @@ const mapPickRows = (rows = []) =>
       teamName: pick.team_name,
       opponentTeamCode: pick.opponent_team_code,
       opponentTeamName: pick.opponent_team_name,
+      opponentRecord: pick.opponent_record,
       position: pick.position,
       line: pick.line,
       ppLine: pick.pp_line,
@@ -716,9 +717,9 @@ export default function Friends({ session, onRequestsCount }) {
                         {requests.map((request) => (
                           <div
                             key={request.id}
-                            className="rounded-2xl border border-white/80 bg-white/70 px-4 py-3 shadow-sm"
+                            className="rounded-2xl border border-white/80 bg-[linear-gradient(135deg,_rgba(255,255,255,0.92),_rgba(236,244,255,0.85))] px-4 py-3 shadow-[0_10px_20px_rgba(15,23,42,0.08)]"
                           >
-                            <div className="flex items-start justify-between gap-3">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                               <div className="flex items-center gap-3">
                                 <div className="grid h-10 w-10 place-items-center rounded-2xl border border-white/80 bg-[linear-gradient(135deg,_rgba(255,255,255,0.95),_rgba(225,238,255,0.85))] text-sm font-semibold text-[color:var(--ink)]">
                                   {(request.displayName || "Friend")
@@ -727,19 +728,22 @@ export default function Friends({ session, onRequestsCount }) {
                                     .toUpperCase()}
                                 </div>
                                 <div>
+                                  <div className="text-[9px] uppercase tracking-[0.28em] text-[color:var(--muted)]">
+                                    Request
+                                  </div>
                                   <div className="text-sm font-semibold text-[color:var(--ink)]">
                                     {request.displayName}
                                   </div>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-2">
+                              <div className="flex flex-wrap items-center gap-2">
                                 <button
                                   type="button"
                                   onClick={() =>
                                     handleRequestAction(request.id, "accepted")
                                   }
                                   disabled={requestActionId === request.id}
-                                  className="rounded-full bg-[color:var(--ink)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-white disabled:cursor-not-allowed disabled:opacity-60"
+                                  className="min-w-[88px] rounded-full bg-[color:var(--ink)] px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-white shadow-[0_10px_18px_rgba(15,23,42,0.2)] disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                   Accept
                                 </button>
@@ -749,7 +753,7 @@ export default function Friends({ session, onRequestsCount }) {
                                     handleRequestAction(request.id, "declined")
                                   }
                                   disabled={requestActionId === request.id}
-                                  className="rounded-full border border-white/80 bg-white/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-[color:var(--ink)] disabled:cursor-not-allowed disabled:opacity-60"
+                                  className="min-w-[88px] rounded-full border border-white/80 bg-white/90 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)] shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                   Decline
                                 </button>

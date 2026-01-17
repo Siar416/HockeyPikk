@@ -236,6 +236,14 @@ export default function App() {
     navigate("/today");
   };
 
+  const handleAuthExit = () => {
+    setSession(null);
+    setIsGuest(false);
+    setAuthError("");
+    setAuthNotice("");
+    navigate("/login");
+  };
+
   const handleLoginSubmit = async (event) => {
     event.preventDefault();
     setAuthError("");
@@ -325,6 +333,7 @@ export default function App() {
       : boardStatusLabel === "Preview"
       ? "border border-[rgba(42,157,244,0.35)] bg-[linear-gradient(135deg,_rgba(42,157,244,0.2),_rgba(129,212,250,0.22))] text-[color:var(--ink)]"
       : "border border-[rgba(255,180,84,0.45)] bg-[linear-gradient(135deg,_rgba(255,180,84,0.22),_rgba(255,214,124,0.24))] text-[color:var(--ink)]";
+  const authActionLabel = isGuest ? "Sign in" : "Log out";
   const todayNotificationCount =
     pendingSuggestionCount + commentNotificationCount;
 
@@ -348,14 +357,16 @@ export default function App() {
                   </div>
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <div className="font-display text-2xl uppercase leading-none">
+                      <div className="font-display text-2xl uppercase leading-none tracking-[0.08em]">
                         HockeyPikk
                       </div>
-                      <span className="flex items-center gap-2 rounded-full border border-white/70 bg-white/85 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--ink)] shadow-[0_6px_14px_rgba(15,23,42,0.12)]">
-                        <span className="grid h-6 w-6 place-items-center rounded-full border border-white/70 bg-[linear-gradient(135deg,_rgba(15,23,42,0.08),_rgba(42,157,244,0.16))] text-[9px] font-semibold text-[color:var(--ink)]">
+                      <span className="flex items-center gap-2 rounded-full border border-white/70 bg-white/90 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.24em] text-[color:var(--ink)] shadow-[0_6px_14px_rgba(15,23,42,0.12)]">
+                        <span className="grid h-5 w-5 place-items-center rounded-full border border-white/80 bg-[linear-gradient(135deg,_rgba(15,23,42,0.12),_rgba(42,157,244,0.18))] text-[8px] font-semibold tracking-normal text-[color:var(--ink)]">
                           {initials || "HP"}
                         </span>
-                        {displayName}
+                        <span className="max-w-[120px] truncate leading-none sm:max-w-[160px]">
+                          {displayName}
+                        </span>
                       </span>
                     </div>
                     <div className="text-xs text-[color:var(--muted)]">
@@ -364,6 +375,13 @@ export default function App() {
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-2">
+                  <button
+                    type="button"
+                    onClick={handleAuthExit}
+                    className="rounded-full border border-white/70 bg-white/85 px-3 py-1 text-[9px] font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)] shadow-sm hover:bg-white"
+                  >
+                    {authActionLabel}
+                  </button>
                   <span className="text-[10px] uppercase tracking-[0.35em] text-[color:var(--muted)]">
                     Board
                   </span>
@@ -401,13 +419,20 @@ export default function App() {
                   />
                 }
               />
-              <Route path="/history" element={<History session={session} />} />
+              <Route
+                path="/history"
+                element={
+                  <History session={session} onExitGuest={handleAuthExit} />
+                }
+              />
               <Route
                 path="/profile"
                 element={
                   <Profile
                     session={session}
                     onProfileUpdate={handleProfileUpdate}
+                    onAuthExit={handleAuthExit}
+                    isGuest={isGuest}
                   />
                 }
               />

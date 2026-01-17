@@ -2,12 +2,97 @@ const express = require("express");
 const requireSupabase = require("../middleware/requireSupabase");
 const requireAuth = require("../middleware/requireAuth");
 const { getPicks } = require("../lib/hockeyChallengeClient");
-const { getPlayerStats } = require("../lib/nhlStatsClient");
+const {
+  getFirstGameStartTime,
+  getPlayerStats,
+  getTeamRecordVsOpponent,
+} = require("../lib/nhlStatsClient");
+const { getSeasonIdForDate, getTodayDateKey } = require("../lib/seasonUtils");
 const { getTeamName } = require("../lib/teamNames");
 
 const router = express.Router();
 
 const formatUpstreamError = (error) => error?.message || "Upstream error.";
+
+const SOURCE_TIME_ZONE = "America/Edmonton";
+const DISPLAY_TIME_ZONE = "America/New_York";
+
+const parseDateTimeParts = (value) => {
+  if (!value || typeof value !== "string") return null;
+  const match =
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/.exec(value);
+  if (!match) return null;
+  const [, year, month, day, hour, minute, second] = match;
+  return {
+    year: Number(year),
+    month: Number(month),
+    day: Number(day),
+    hour: Number(hour),
+    minute: Number(minute),
+    second: Number(second || 0),
+  };
+};
+
+const getTimeZoneOffsetMinutes = (timeZone, date) => {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  const parts = formatter.formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const utcTime = Date.UTC(
+    Number(values.year),
+    Number(values.month) - 1,
+    Number(values.day),
+    Number(values.hour),
+    Number(values.minute),
+    Number(values.second)
+  );
+  return (utcTime - date.getTime()) / 60000;
+};
+
+const getZonedDate = (parts, timeZone) => {
+  if (!parts) return null;
+  const utcGuess = Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second
+  );
+  const guessDate = new Date(utcGuess);
+  const offsetMinutes = getTimeZoneOffsetMinutes(timeZone, guessDate);
+  return new Date(utcGuess - offsetMinutes * 60000);
+};
+
+const formatTimeInZone = (value, timeZone) => {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone,
+  }).format(date);
+};
+
+const formatTimeLabel = (value) => {
+  return formatTimeInZone(value, DISPLAY_TIME_ZONE);
+};
+
+const formatAvailableTimeLabel = (value) => {
+  const parts = parseDateTimeParts(value);
+  if (!parts) return null;
+  const zonedDate = getZonedDate(parts, SOURCE_TIME_ZONE);
+  return formatTimeInZone(zonedDate, DISPLAY_TIME_ZONE);
+};
 
 const buildStatsColumns = (stats) => ({
   season_games_played: stats?.seasonGamesPlayed ?? null,
@@ -36,6 +121,26 @@ const buildPlayerMap = (playerLists) => {
   });
   return map;
 };
+
+router.get("/meta", async (req, res) => {
+  try {
+    const data = await getPicks();
+    const dateKey = String(req.query?.date || "").trim() || getTodayDateKey();
+    const lockTime = await getFirstGameStartTime(dateKey);
+    const dateTimeAvailable = data.dateTimeAvailable || null;
+    const lockTimeLabel =
+      formatTimeLabel(lockTime) || formatAvailableTimeLabel(dateTimeAvailable);
+    return res.json({
+      dateTimeAvailable,
+      season: data.season || null,
+      seasonType: data.seasonType || null,
+      lockTime,
+      lockTimeLabel,
+    });
+  } catch (error) {
+    return res.status(502).json({ error: formatUpstreamError(error) });
+  }
+});
 
 router.get("/options", requireSupabase, requireAuth, async (_req, res) => {
   try {
@@ -80,7 +185,7 @@ router.post("/", requireSupabase, requireAuth, async (req, res) => {
 
   const { data: board, error: boardError } = await supabase
     .from("boards")
-    .select("id, status")
+    .select("id, status, board_date")
     .eq("id", boardId)
     .eq("created_by", userId)
     .maybeSingle();
@@ -147,6 +252,9 @@ router.post("/", requireSupabase, requireAuth, async (req, res) => {
         position: player.position || null,
         line,
         pp_line: ppLine,
+        game_goals: null,
+        game_played: null,
+        game_updated_at: null,
         is_locked: false,
         ...buildStatsColumns(stats),
       };
@@ -170,7 +278,32 @@ router.post("/", requireSupabase, requireAuth, async (req, res) => {
     return res.status(500).json({ error: saveError.message });
   }
 
-  return res.json({ picks: saved ?? [] });
+  const seasonId = getSeasonIdForDate(board?.board_date);
+  const recordCache = new Map();
+  const resolveRecord = async (teamCode, opponentCode) => {
+    if (!seasonId || !teamCode || !opponentCode) return null;
+    const cacheKey = `${teamCode}-${opponentCode}-${seasonId}`;
+    if (recordCache.has(cacheKey)) return recordCache.get(cacheKey);
+    const record = await getTeamRecordVsOpponent({
+      teamCode,
+      opponentCode,
+      seasonId,
+    });
+    recordCache.set(cacheKey, record);
+    return record;
+  };
+
+  const picksWithRecords = await Promise.all(
+    (saved ?? []).map(async (pick) => ({
+      ...pick,
+      opponent_record: await resolveRecord(
+        pick.team_code,
+        pick.opponent_team_code
+      ),
+    }))
+  );
+
+  return res.json({ picks: picksWithRecords });
 });
 
 module.exports = router;

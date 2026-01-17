@@ -1,6 +1,8 @@
 const express = require("express");
 const requireSupabase = require("../middleware/requireSupabase");
 const requireAuth = require("../middleware/requireAuth");
+const { getTeamRecordVsOpponent } = require("../lib/nhlStatsClient");
+const { getSeasonIdForDate } = require("../lib/seasonUtils");
 
 const router = express.Router();
 
@@ -158,9 +160,34 @@ router.get("/today", requireSupabase, requireAuth, async (req, res) => {
     return res.status(500).json({ error: formatSchemaError(queryError) });
   }
 
+  const seasonId = getSeasonIdForDate(resolvedBoard.board_date);
+  const recordCache = new Map();
+  const resolveRecord = async (teamCode, opponentCode) => {
+    if (!seasonId || !teamCode || !opponentCode) return null;
+    const cacheKey = `${teamCode}-${opponentCode}-${seasonId}`;
+    if (recordCache.has(cacheKey)) return recordCache.get(cacheKey);
+    const record = await getTeamRecordVsOpponent({
+      teamCode,
+      opponentCode,
+      seasonId,
+    });
+    recordCache.set(cacheKey, record);
+    return record;
+  };
+
+  const picksWithRecords = await Promise.all(
+    (picks ?? []).map(async (pick) => ({
+      ...pick,
+      opponent_record: await resolveRecord(
+        pick.team_code,
+        pick.opponent_team_code
+      ),
+    }))
+  );
+
   return res.json({
     board: resolvedBoard,
-    picks: picks ?? [],
+    picks: picksWithRecords,
     counts: {
       comments: commentCount ?? 0,
       suggestions: suggestionCount ?? 0,
@@ -179,7 +206,7 @@ router.post("/:id/lock", requireSupabase, requireAuth, async (req, res) => {
 
   const { data: board, error: boardError } = await supabase
     .from("boards")
-    .select("id, status, lock_at, created_by")
+    .select("id, status, lock_at, created_by, board_date")
     .eq("id", boardId)
     .maybeSingle();
 
@@ -222,9 +249,34 @@ router.post("/:id/lock", requireSupabase, requireAuth, async (req, res) => {
     return res.status(500).json({ error: formatSchemaError(picksError) });
   }
 
+  const seasonId = getSeasonIdForDate(board.board_date);
+  const recordCache = new Map();
+  const resolveRecord = async (teamCode, opponentCode) => {
+    if (!seasonId || !teamCode || !opponentCode) return null;
+    const cacheKey = `${teamCode}-${opponentCode}-${seasonId}`;
+    if (recordCache.has(cacheKey)) return recordCache.get(cacheKey);
+    const record = await getTeamRecordVsOpponent({
+      teamCode,
+      opponentCode,
+      seasonId,
+    });
+    recordCache.set(cacheKey, record);
+    return record;
+  };
+
+  const picksWithRecords = await Promise.all(
+    (lockedPicks ?? []).map(async (pick) => ({
+      ...pick,
+      opponent_record: await resolveRecord(
+        pick.team_code,
+        pick.opponent_team_code
+      ),
+    }))
+  );
+
   return res.json({
     board: lockedBoard,
-    picks: lockedPicks ?? [],
+    picks: picksWithRecords,
   });
 });
 

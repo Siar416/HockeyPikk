@@ -22,6 +22,19 @@ export const fetchPickOptions = async ({ accessToken }) => {
   return { data: payload, error: null };
 };
 
+export const fetchPickMeta = async ({ dateKey } = {}) => {
+  const query = dateKey ? `?date=${encodeURIComponent(dateKey)}` : "";
+  const response = await fetch(`${API_BASE}/picks/meta${query}`);
+
+  const payload = await parseJson(response);
+
+  if (!response.ok) {
+    return { data: null, error: new Error(payload?.error || "Request failed.") };
+  }
+
+  return { data: payload, error: null };
+};
+
 export const savePicks = async ({ accessToken, boardId, selections }) => {
   const response = await fetch(`${API_BASE}/picks`, {
     method: "POST",
