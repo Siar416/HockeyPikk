@@ -188,18 +188,18 @@ export default function GroupPickCard({
     : "border border-[rgba(42,157,244,0.28)] bg-[linear-gradient(135deg,_rgba(42,157,244,0.16),_rgba(129,212,250,0.2))] text-[color:var(--ink)]";
 
   return (
-    <div className="rounded-3xl border border-white/80 bg-[linear-gradient(180deg,_rgba(255,255,255,0.96),_rgba(242,247,255,0.78))] p-5 shadow-[0_18px_36px_rgba(15,23,42,0.12)] backdrop-blur">
+    <div className="surface-card rounded-3xl p-5 backdrop-blur">
       {/* Top row */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <span className="rounded-full border border-white/70 bg-white/85 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-[color:var(--muted)] shadow-sm">
+          <span className="chip">
             {groupLabel}
           </span>
           {/* TODO: show group rules or context */}
         </div>
 
         <span
-          className={`rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[0.3em] shadow-[0_6px_16px_rgba(15,23,42,0.12)] ${statusStyles}`}
+          className={`rounded-full px-2.5 py-1 text-xs font-semibold tracking-[0.08em] shadow-[0_6px_16px_rgba(15,23,42,0.12)] ${statusStyles}`}
         >
           {statusLabel}
           {/* TODO: show lock time when locked */}
@@ -207,12 +207,12 @@ export default function GroupPickCard({
       </div>
 
       {/* Selected player label */}
-      <div className="mt-3 text-[10px] uppercase tracking-[0.35em] text-[color:var(--muted)]">
+      <div className="mt-3 text-xs font-semibold tracking-[0.08em] text-[color:var(--muted)]">
         Selected Player
       </div>
 
       {/* Selected player row */}
-      <div className="mt-2 flex items-center justify-between rounded-2xl border border-white/80 bg-[linear-gradient(135deg,_rgba(255,255,255,0.95),_rgba(225,238,255,0.85))] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+      <div className="mt-2 flex flex-col gap-3 rounded-2xl border border-white/80 bg-[linear-gradient(135deg,_rgba(255,255,255,0.95),_rgba(225,238,255,0.85))] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <TeamBadge teamCode={teamCode} teamName={teamName} />
 
@@ -238,19 +238,19 @@ export default function GroupPickCard({
             type="button"
             onClick={onChange}
             disabled={isLocked}
-            className="rounded-full bg-[linear-gradient(135deg,_#0b1424,_#1f3a60)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-white shadow-[0_8px_16px_rgba(15,23,42,0.2)] transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
+            className="btn-primary w-full rounded-full px-3 py-1 text-xs tracking-[0.08em] sm:w-auto"
           >
             Picked
           </button>
         ) : (
-          <span className="rounded-full border border-white/60 bg-white/70 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-[color:var(--ink)] shadow-sm">
+          <span className="chip">
             Picked
           </span>
         )}
       </div>
 
       {statPills.length ? (
-        <div className="mt-3 flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.25em] text-[color:var(--muted)]">
+        <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold tracking-[0.08em] text-[color:var(--muted)]">
           {statPills.map((stat) => (
             <span
               key={stat}
@@ -264,7 +264,7 @@ export default function GroupPickCard({
 
       {hasSeasonStats ? (
         <div className="mt-4">
-          <div className="text-[10px] uppercase tracking-[0.32em] text-[color:var(--muted)]">
+          <div className="text-xs font-semibold tracking-[0.08em] text-[color:var(--muted)]">
             Season snapshot
           </div>
           {seasonSummary ? (
@@ -279,7 +279,7 @@ export default function GroupPickCard({
                   key={stat.label}
                   className="rounded-2xl border border-white/80 bg-white/80 px-3 py-2 shadow-sm"
                 >
-                  <div className="text-[9px] uppercase tracking-[0.24em] text-[color:var(--muted)]">
+                  <div className="text-xs font-semibold tracking-[0.08em] text-[color:var(--muted)]">
                     {stat.label}
                   </div>
                   <div className="text-sm font-semibold text-[color:var(--ink)]">
@@ -294,7 +294,7 @@ export default function GroupPickCard({
 
       {hasFormStats ? (
         <div className="mt-3">
-          <div className="text-[10px] uppercase tracking-[0.32em] text-[color:var(--muted)]">
+          <div className="text-xs font-semibold tracking-[0.08em] text-[color:var(--muted)]">
             Last 5
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -303,7 +303,7 @@ export default function GroupPickCard({
                 key={stat.label}
                 className="flex items-center gap-2 rounded-full border border-[rgba(16,185,129,0.28)] bg-[rgba(16,185,129,0.08)] px-3 py-1.5 text-xs shadow-sm"
               >
-                <span className="text-[10px] uppercase tracking-[0.24em] text-[color:var(--muted)]">
+                <span className="text-xs font-semibold tracking-[0.08em] text-[color:var(--muted)]">
                   {stat.label}
                 </span>
                 <span className="font-semibold text-[color:var(--ink)]">
@@ -316,12 +316,12 @@ export default function GroupPickCard({
       ) : null}
 
       {onSuggest ? (
-        <div className="flex items-center justify-end pt-3 text-xs text-[color:var(--muted)]">
+        <div className="flex items-center justify-stretch pt-3 text-xs text-[color:var(--muted)] sm:justify-end">
           <button
             type="button"
             onClick={onSuggest}
             disabled={isLocked}
-            className="rounded-full border border-white/80 bg-white/70 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.25em] text-[color:var(--ink)] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="btn-secondary w-full rounded-full px-3 py-1.5 text-xs tracking-[0.08em] sm:w-auto"
           >
             Suggest changes
           </button>

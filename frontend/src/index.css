@@ -1,38 +1,49 @@
+@import url("https://fonts.googleapis.com/css2?family=Antonio:wght@500;700&family=Sora:wght@400;500;600;700&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --font-body: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
-  --font-display: "Bebas Neue", "Impact", sans-serif;
-  --ink: #0b1424;
-  --ink-2: #1a2a3a;
-  --muted: #556575;
-  --ice-1: #eff4ff;
-  --ice-2: #dfe9ff;
-  --ice-3: #c9d9ff;
-  --accent: #f04e4e;
-  --accent-2: #ffb454;
-  --accent-3: #2a9df4;
+  --font-body: "Sora", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Antonio", "Segoe UI", sans-serif;
+  --ink: #102139;
+  --ink-2: #1f3552;
+  --muted: #5a6f86;
+  --ice-1: #edf4ff;
+  --ice-2: #d7e6ff;
+  --ice-3: #bdd2f6;
+  --surface: rgba(255, 255, 255, 0.9);
+  --surface-soft: rgba(255, 255, 255, 0.76);
+  --accent: #e34f54;
+  --accent-2: #ff9f43;
+  --accent-3: #1f66ff;
+  --success: #1ea672;
+  --ring: rgba(31, 102, 255, 0.35);
 }
 
 @layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
   body {
     min-height: 100vh;
     color: var(--ink);
     font-family: var(--font-body);
+    line-height: 1.45;
     background-color: var(--ice-1);
     background-image:
-      radial-gradient(circle at 12% 10%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0) 55%),
-      radial-gradient(circle at 88% 8%, rgba(90, 165, 255, 0.24), rgba(90, 165, 255, 0) 45%),
-      radial-gradient(circle at 15% 88%, rgba(255, 180, 120, 0.22), rgba(255, 180, 120, 0) 55%),
-      linear-gradient(135deg, rgba(15, 23, 42, 0.04), rgba(15, 23, 42, 0)),
+      radial-gradient(circle at 8% 6%, rgba(255, 255, 255, 0.98), rgba(255, 255, 255, 0) 42%),
+      radial-gradient(circle at 85% 0%, rgba(31, 102, 255, 0.2), rgba(31, 102, 255, 0) 38%),
+      radial-gradient(circle at 95% 94%, rgba(255, 159, 67, 0.22), rgba(255, 159, 67, 0) 42%),
+      linear-gradient(140deg, rgba(16, 33, 57, 0.05), rgba(16, 33, 57, 0) 55%),
       repeating-linear-gradient(
-        135deg,
-        rgba(255, 255, 255, 0.75) 0,
-        rgba(255, 255, 255, 0.75) 1px,
+        -34deg,
+        rgba(255, 255, 255, 0.64) 0,
+        rgba(255, 255, 255, 0.64) 1px,
         rgba(255, 255, 255, 0) 1px,
-        rgba(255, 255, 255, 0) 12px
+        rgba(255, 255, 255, 0) 14px
       );
     background-attachment: fixed;
   }
@@ -40,30 +51,192 @@
   #root {
     min-height: 100vh;
   }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+    color: inherit;
+  }
+
+  ::selection {
+    color: #fff;
+    background: rgba(31, 102, 255, 0.72);
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--ring);
+    outline-offset: 2px;
+  }
 }
 
 @layer utilities {
   .font-display {
     font-family: var(--font-display);
-    letter-spacing: 0.06em;
+    letter-spacing: 0.04em;
   }
 
   .glass-card {
-    background: linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.92),
-      rgba(244, 248, 255, 0.78)
-    );
-    border: 1px solid rgba(255, 255, 255, 0.7);
+    background: linear-gradient(170deg, rgba(255, 255, 255, 0.95), rgba(242, 248, 255, 0.78));
+    border: 1px solid rgba(255, 255, 255, 0.72);
     box-shadow:
-      0 20px 50px rgba(15, 23, 42, 0.12),
-      0 6px 18px rgba(15, 23, 42, 0.08);
-    backdrop-filter: blur(18px) saturate(1.2);
-    -webkit-backdrop-filter: blur(18px) saturate(1.2);
+      0 22px 45px rgba(16, 33, 57, 0.12),
+      0 8px 20px rgba(16, 33, 57, 0.08);
+    backdrop-filter: blur(16px) saturate(1.12);
+    -webkit-backdrop-filter: blur(16px) saturate(1.12);
+  }
+
+  .surface-card {
+    border: 1px solid rgba(255, 255, 255, 0.75);
+    background: var(--surface-soft);
+    box-shadow: 0 10px 24px rgba(16, 33, 57, 0.08);
+  }
+
+  .empty-state {
+    border: 1px dashed rgba(90, 111, 134, 0.35);
+    background: rgba(255, 255, 255, 0.68);
+    border-radius: 1rem;
+    padding: 1.1rem;
+    text-align: center;
+    font-size: 0.92rem;
+    color: var(--muted);
+  }
+
+  .chip {
+    border-radius: 9999px;
+    border: 1px solid rgba(255, 255, 255, 0.72);
+    background: rgba(255, 255, 255, 0.9);
+    padding: 0.38rem 0.76rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--ink-2);
+  }
+
+  .field-input,
+  .field-select,
+  .field-textarea {
+    width: 100%;
+    border-radius: 0.95rem;
+    border: 1px solid rgba(177, 197, 224, 0.75);
+    background: rgba(255, 255, 255, 0.9);
+    min-height: 2.85rem;
+    padding: 0.72rem 0.82rem;
+    font-size: 1rem;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.72) inset;
+    transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+  }
+
+  .field-input:focus,
+  .field-select:focus,
+  .field-textarea:focus {
+    outline: none;
+    border-color: rgba(31, 102, 255, 0.45);
+    box-shadow: 0 0 0 3px rgba(31, 102, 255, 0.12);
+    background: #fff;
+  }
+
+  .field-textarea {
+    min-height: 5.5rem;
+    resize: vertical;
+  }
+
+  .btn-primary,
+  .btn-secondary,
+  .btn-quiet,
+  .btn-danger {
+    border-radius: 0.9rem;
+    min-height: 2.75rem;
+    padding: 0.72rem 1rem;
+    font-size: 0.79rem;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    transition: transform 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
+  }
+
+  .btn-primary {
+    color: #fff;
+    background: linear-gradient(135deg, #12346a, var(--accent-3));
+    box-shadow: 0 12px 25px rgba(16, 51, 106, 0.28);
+  }
+
+  .btn-secondary {
+    color: var(--ink);
+    border: 1px solid rgba(255, 255, 255, 0.85);
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 8px 18px rgba(16, 33, 57, 0.12);
+  }
+
+  .btn-quiet {
+    color: var(--ink-2);
+    border: 1px solid rgba(31, 53, 82, 0.15);
+    background: rgba(246, 250, 255, 0.92);
+  }
+
+  .btn-danger {
+    color: #fff;
+    background: linear-gradient(135deg, #ce474d, #ee6b58);
+    box-shadow: 0 12px 26px rgba(206, 71, 77, 0.26);
+  }
+
+  .btn-primary:hover,
+  .btn-secondary:hover,
+  .btn-quiet:hover,
+  .btn-danger:hover {
+    transform: translateY(-1px);
+  }
+
+  .btn-primary:disabled,
+  .btn-secondary:disabled,
+  .btn-quiet:disabled,
+  .btn-danger:disabled {
+    cursor: not-allowed;
+    transform: none;
+    opacity: 0.62;
+  }
+
+  .kicker {
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  @media (min-width: 640px) {
+    .empty-state {
+      font-size: 0.875rem;
+    }
+
+    .chip {
+      font-size: 0.7rem;
+    }
+
+    .field-input,
+    .field-select,
+    .field-textarea {
+      min-height: 2.65rem;
+      font-size: 0.95rem;
+    }
+
+    .field-textarea {
+      min-height: 5rem;
+    }
+
+    .btn-primary,
+    .btn-secondary,
+    .btn-quiet,
+    .btn-danger {
+      min-height: 2.55rem;
+      padding: 0.6rem 0.95rem;
+      font-size: 0.74rem;
+    }
   }
 
   .animate-fade-up {
-    animation: fade-up 0.6s ease-out both;
+    animation: fade-up 0.58s ease-out both;
   }
 
   .anim-delay-80 {

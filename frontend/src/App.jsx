@@ -340,63 +340,53 @@ export default function App() {
   return (
     <div className="relative min-h-screen text-[color:var(--ink)]">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-28 left-12 h-72 w-72 rounded-full bg-[radial-gradient(circle,_rgba(90,165,255,0.26),_rgba(90,165,255,0))] blur-3xl" />
-        <div className="absolute top-24 right-6 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(255,180,120,0.28),_rgba(255,180,120,0))] blur-3xl" />
-        <div className="absolute bottom-12 -left-20 h-80 w-80 rounded-full bg-[radial-gradient(circle,_rgba(15,23,42,0.18),_rgba(15,23,42,0))] blur-3xl" />
+        <div className="absolute -top-28 left-6 h-72 w-72 rounded-full bg-[radial-gradient(circle,_rgba(31,102,255,0.24),_rgba(31,102,255,0))] blur-3xl" />
+        <div className="absolute top-20 right-4 h-72 w-72 rounded-full bg-[radial-gradient(circle,_rgba(255,159,67,0.28),_rgba(255,159,67,0))] blur-3xl" />
+        <div className="absolute bottom-12 -left-20 h-80 w-80 rounded-full bg-[radial-gradient(circle,_rgba(16,33,57,0.2),_rgba(16,33,57,0))] blur-3xl" />
       </div>
 
       {isAuthed ? (
         <>
           {/* Header */}
-          <header className="fixed top-0 left-0 right-0 z-30">
-            <div className="mx-auto max-w-md px-4 pt-4 md:max-w-3xl">
-              <div className="glass-card flex items-center justify-between rounded-[28px] px-5 py-4">
-                <div className="flex items-center gap-3">
-                  <div className="grid h-12 w-12 place-items-center rounded-2xl border border-white/70 bg-[linear-gradient(135deg,_#0b1424,_#1f3a60)] text-white font-display text-xl shadow-[0_12px_26px_rgba(15,23,42,0.28)]">
+          <header className="fixed inset-x-0 top-0 z-30">
+            <div className="mx-auto max-w-5xl px-4 pt-4">
+              <div className="glass-card flex flex-wrap items-center justify-between gap-3 rounded-[26px] px-4 py-3 md:px-5">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[linear-gradient(140deg,_#13356b,_#1f66ff)] text-white font-display text-xl shadow-[0_10px_24px_rgba(19,53,107,0.35)]">
                     HP
                   </div>
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="font-display text-2xl uppercase leading-none tracking-[0.08em]">
-                        HockeyPikk
-                      </div>
-                      <span className="flex items-center gap-2 rounded-full border border-white/70 bg-white/90 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.24em] text-[color:var(--ink)] shadow-[0_6px_14px_rgba(15,23,42,0.12)]">
-                        <span className="grid h-5 w-5 place-items-center rounded-full border border-white/80 bg-[linear-gradient(135deg,_rgba(15,23,42,0.12),_rgba(42,157,244,0.18))] text-[8px] font-semibold tracking-normal text-[color:var(--ink)]">
-                          {initials || "HP"}
-                        </span>
-                        <span className="max-w-[120px] truncate leading-none sm:max-w-[160px]">
-                          {displayName}
-                        </span>
-                      </span>
-                    </div>
-                    <div className="text-xs text-[color:var(--muted)]">
-                      Share today&apos;s picks with your crew
-                    </div>
+                  <div className="min-w-0">
+                    <p className="kicker">HockeyPikk</p>
+                    <p className="truncate text-sm text-[color:var(--muted)]">
+                      {isGuest
+                        ? "Guest mode - Explore today's board"
+                        : `Welcome back, ${displayName}`}
+                    </p>
                   </div>
                 </div>
-                <div className="flex flex-col items-end gap-2">
-                  <button
-                    type="button"
-                    onClick={handleAuthExit}
-                    className="rounded-full border border-white/70 bg-white/85 px-3 py-1 text-[9px] font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)] shadow-sm hover:bg-white"
-                  >
-                    {authActionLabel}
-                  </button>
-                  <span className="text-[10px] uppercase tracking-[0.35em] text-[color:var(--muted)]">
-                    Board
+                <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
+                  <span className="grid h-7 w-7 place-items-center rounded-full border border-white/75 bg-white/90 text-[11px] font-semibold text-[color:var(--ink)] shadow-sm">
+                    {initials || "HP"}
                   </span>
                   <span
-                    className={`rounded-full px-3 py-1 text-xs font-semibold shadow-[0_8px_18px_rgba(15,23,42,0.12)] ${boardStatusStyles}`}
+                    className={`rounded-full px-3 py-1 text-xs font-semibold shadow-[0_8px_16px_rgba(16,33,57,0.12)] ${boardStatusStyles}`}
                   >
                     {boardStatusLabel}
                   </span>
+                  <button
+                    type="button"
+                    onClick={handleAuthExit}
+                    className="btn-secondary rounded-full px-3 py-2 text-xs tracking-[0.08em]"
+                  >
+                    {authActionLabel}
+                  </button>
                 </div>
               </div>
             </div>
           </header>
 
           {/* Content */}
-          <main className="relative z-10 mx-auto max-w-md space-y-4 px-4 pb-28 pt-32 md:max-w-3xl">
+          <main className="relative z-10 mx-auto max-w-5xl space-y-4 px-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] pt-36 md:pb-28 md:pt-32">
             <Routes>
               <Route path="/" element={<Navigate to="/today" replace />} />
               <Route
@@ -441,9 +431,9 @@ export default function App() {
           </main>
 
           {/* Bottom Nav */}
-          <nav className="fixed bottom-0 left-0 right-0 z-30 pb-4">
-            <div className="mx-auto max-w-md px-4 md:max-w-3xl">
-              <div className="grid grid-cols-4 gap-2 rounded-[26px] border border-white/70 bg-white/85 p-2.5 shadow-[0_20px_45px_rgba(15,23,42,0.16)] backdrop-blur">
+          <nav className="fixed inset-x-0 bottom-0 z-30 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <div className="mx-auto max-w-5xl px-4">
+              <div className="grid grid-cols-4 gap-2 rounded-[24px] border border-white/75 bg-white/90 p-2.5 shadow-[0_18px_40px_rgba(16,33,57,0.18)] backdrop-blur">
                 {tabs.map((t) => {
                   const isActive = active === t.key;
                   const showCommentBubble =
@@ -465,39 +455,39 @@ export default function App() {
                           : t.label
                       }
                       className={[
-                        "relative flex flex-col items-center gap-1.5 rounded-2xl px-2.5 py-2 transition",
+                        "relative flex min-h-[60px] flex-col items-center justify-center gap-1 rounded-xl px-2 py-2 text-[12px] font-semibold transition",
                         isActive
-                          ? "bg-[linear-gradient(135deg,_rgba(15,23,42,0.08),_rgba(42,157,244,0.12))] text-[color:var(--ink)] shadow-[0_8px_18px_rgba(15,23,42,0.12)]"
-                          : "text-[color:var(--muted)] hover:text-[color:var(--ink)]",
+                          ? "bg-[linear-gradient(135deg,_rgba(31,102,255,0.14),_rgba(255,159,67,0.16))] text-[color:var(--ink)] shadow-[0_8px_18px_rgba(16,33,57,0.12)]"
+                          : "text-[color:var(--muted)] hover:bg-white/70 hover:text-[color:var(--ink)]",
                       ].join(" ")}
                     >
                       {notificationCount > 0 ? (
                         <span className="pointer-events-none absolute -top-2 right-1 flex items-center gap-1">
                           {showCommentBubble ? (
-                            <span className="grid h-4 w-4 place-items-center rounded-full border border-white/70 bg-[linear-gradient(135deg,_#22c55e,_#16a34a)] text-white shadow-[0_4px_10px_rgba(34,197,94,0.35)]">
+                            <span className="grid h-5 w-5 place-items-center rounded-full border border-white/70 bg-[linear-gradient(135deg,_#22c55e,_#16a34a)] text-white shadow-[0_4px_10px_rgba(34,197,94,0.35)]">
                               <svg
                                 aria-hidden="true"
                                 viewBox="0 0 24 24"
-                                className="h-2.5 w-2.5"
+                                className="h-3 w-3"
                                 fill="currentColor"
                               >
                                 <path d="M7.5 6.5h9A3 3 0 0 1 19.5 9.5v4a3 3 0 0 1-3 3H11l-3 2.2V16.5H7.5a3 3 0 0 1-3-3v-4a3 3 0 0 1 3-3Z" />
                               </svg>
                             </span>
                           ) : null}
-                          <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[linear-gradient(135deg,_#f97316,_#ef4444)] px-1 text-[9px] font-semibold leading-none tracking-normal text-white shadow-[0_6px_14px_rgba(244,68,79,0.35)]">
+                          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[linear-gradient(135deg,_#f97316,_#ef4444)] px-1 text-[11px] font-semibold leading-none tracking-normal text-white shadow-[0_6px_14px_rgba(244,68,79,0.35)]">
                             {notificationCount > 99 ? "99+" : notificationCount}
                           </span>
                         </span>
                       ) : null}
-                      <span className="text-[10px] uppercase tracking-[0.22em]">
+                      <span className="text-[12px] tracking-[0.06em]">
                         {t.label}
                       </span>
                       <span
                         className={[
-                          "h-1.5 w-6 rounded-full transition",
+                          "h-1 w-5 rounded-full transition",
                           isActive
-                            ? "bg-[linear-gradient(90deg,_rgba(42,157,244,0.9),_rgba(240,78,78,0.9))]"
+                            ? "bg-[linear-gradient(90deg,_rgba(31,102,255,0.9),_rgba(227,79,84,0.9))]"
                             : "bg-transparent",
                         ].join(" ")}
                       />
@@ -509,7 +499,7 @@ export default function App() {
           </nav>
         </>
       ) : (
-        <main className="relative z-10 mx-auto flex min-h-[100svh] w-full max-w-md flex-col justify-start px-4 py-12 sm:justify-center">
+        <main className="relative z-10 mx-auto flex min-h-[100svh] w-full max-w-lg flex-col justify-center px-4 py-8 sm:py-10">
           <Routes>
             <Route
               path="/login"

@@ -1,28 +1,26 @@
 export default function Signup({ onSubmit, onSwitch, onGuest, error, notice }) {
   return (
-    <section className="glass-card rounded-3xl p-6">
+    <section className="glass-card rounded-3xl p-6 sm:p-7">
       <div className="flex items-center gap-3">
-        <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[conic-gradient(from_180deg,_#0ea5e9,_#22d3ee,_#f97316,_#0ea5e9)] text-white font-display text-xl">
+        <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[linear-gradient(145deg,_#ce474d,_#ff9f43)] text-white font-display text-xl">
           HP
         </div>
         <div>
-          <p className="text-[10px] uppercase tracking-[0.35em] text-[color:var(--muted)]">
-            Join
-          </p>
-          <h1 className="font-display text-3xl uppercase">Sign Up</h1>
+          <p className="kicker">Create account</p>
+          <h1 className="font-display text-4xl leading-none">Sign up</h1>
         </div>
       </div>
       <p className="mt-3 text-sm text-[color:var(--muted)]">
-        Create your HockeyPikk account to share picks with friends.
+        Build your board, invite your crew, and track your picks over time.
       </p>
 
-      <div className="mt-5 h-px w-full bg-[rgba(15,23,42,0.08)]" />
+      <div className="mt-5 h-px w-full bg-[rgba(16,33,57,0.1)]" />
 
       <form className="mt-5 space-y-4" onSubmit={onSubmit}>
         <div className="space-y-2">
           <label
             htmlFor="signup-name"
-            className="block text-[11px] uppercase tracking-[0.25em] text-[color:var(--muted)]"
+            className="block text-xs font-semibold tracking-[0.08em] text-[color:var(--muted)]"
           >
             Display Name
           </label>
@@ -33,14 +31,14 @@ export default function Signup({ onSubmit, onSwitch, onGuest, error, notice }) {
             placeholder="Ice Captain"
             autoComplete="nickname"
             required
-            className="w-full rounded-2xl border border-white/80 bg-white/80 px-4 py-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-white/80"
+            className="field-input"
           />
         </div>
 
         <div className="space-y-2">
           <label
             htmlFor="signup-email"
-            className="block text-[11px] uppercase tracking-[0.25em] text-[color:var(--muted)]"
+            className="block text-xs font-semibold tracking-[0.08em] text-[color:var(--muted)]"
           >
             Email
           </label>
@@ -51,14 +49,14 @@ export default function Signup({ onSubmit, onSwitch, onGuest, error, notice }) {
             placeholder="you@rinkmail.com"
             autoComplete="email"
             required
-            className="w-full rounded-2xl border border-white/80 bg-white/80 px-4 py-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-white/80"
+            className="field-input"
           />
         </div>
 
         <div className="space-y-2">
           <label
             htmlFor="signup-password"
-            className="block text-[11px] uppercase tracking-[0.25em] text-[color:var(--muted)]"
+            className="block text-xs font-semibold tracking-[0.08em] text-[color:var(--muted)]"
           >
             Password
           </label>
@@ -69,7 +67,7 @@ export default function Signup({ onSubmit, onSwitch, onGuest, error, notice }) {
             placeholder="Create a password"
             autoComplete="new-password"
             required
-            className="w-full rounded-2xl border border-white/80 bg-white/80 px-4 py-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-white/80"
+            className="field-input"
           />
           <p className="text-xs text-[color:var(--muted)]">
             Use at least 8 characters.
@@ -79,14 +77,14 @@ export default function Signup({ onSubmit, onSwitch, onGuest, error, notice }) {
         <div className="space-y-3 pt-2">
           <button
             type="submit"
-            className="w-full rounded-2xl bg-[linear-gradient(135deg,_#f4444f,_#ff885e)] py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-white shadow-[0_14px_28px_rgba(244,68,79,0.25)] sm:text-xs sm:tracking-[0.28em]"
+            className="btn-danger w-full py-3 text-sm tracking-[0.1em]"
           >
             Create Account
           </button>
           <button
             type="button"
             onClick={onGuest}
-            className="w-full rounded-2xl border border-white/80 bg-white/70 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--ink)] sm:text-xs sm:tracking-[0.28em]"
+            className="btn-secondary w-full py-3 text-sm tracking-[0.1em]"
           >
             Continue as Guest
           </button>
@@ -94,7 +92,7 @@ export default function Signup({ onSubmit, onSwitch, onGuest, error, notice }) {
         {notice ? (
           <p
             role="status"
-            className="rounded-2xl border border-white/70 bg-white/60 px-3 py-2 text-xs text-[color:var(--muted)]"
+            className="rounded-2xl border border-[rgba(31,102,255,0.2)] bg-[rgba(31,102,255,0.08)] px-3 py-2 text-sm text-[color:var(--ink-2)]"
           >
             {notice}
           </p>
@@ -102,19 +100,19 @@ export default function Signup({ onSubmit, onSwitch, onGuest, error, notice }) {
         {error ? (
           <p
             role="alert"
-            className="rounded-2xl border border-[rgba(244,68,79,0.3)] bg-[rgba(244,68,79,0.1)] px-3 py-2 text-xs text-[color:var(--accent)]"
+            className="rounded-2xl border border-[rgba(227,79,84,0.3)] bg-[rgba(227,79,84,0.1)] px-3 py-2 text-sm text-[color:var(--accent)]"
           >
             {error}
           </p>
         ) : null}
       </form>
 
-      <div className="pt-4 text-center text-xs text-[color:var(--muted)]">
+      <div className="pt-4 text-center text-sm text-[color:var(--muted)]">
         Already have an account?{" "}
         <button
           type="button"
           onClick={onSwitch}
-          className="font-semibold text-[color:var(--ink)]"
+          className="font-semibold text-[color:var(--ink)] underline-offset-4 hover:underline"
         >
           Sign in
         </button>

@@ -9,7 +9,7 @@ import {
   sendFriendRequest,
 } from "../lib/friendsService";
 import { fetchPickOptions } from "../lib/picksService";
-import { createSuggestion } from "../lib/suggestionsService";
+import { createSuggestion, fetchSuggestions } from "../lib/suggestionsService";
 
 const mapPickRows = (rows = []) =>
   rows
@@ -69,6 +69,24 @@ const formatPpMeta = (value) => {
   return `PP${upper}`;
 };
 
+const formatTimestamp = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+};
+
+const formatSuggestionStatus = (status) => {
+  if (!status) return "unknown";
+  if (status === "rejected") return "declined";
+  return status;
+};
+
 export default function Friends({ session, onRequestsCount }) {
   const [friends, setFriends] = useState([]);
   const [requests, setRequests] = useState([]);
@@ -90,9 +108,14 @@ export default function Friends({ session, onRequestsCount }) {
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [suggestionGroupId, setSuggestionGroupId] = useState("");
   const [suggestionPlayerId, setSuggestionPlayerId] = useState("");
+  const [suggestionSearch, setSuggestionSearch] = useState("");
   const [suggestionReason, setSuggestionReason] = useState("");
   const [suggestionError, setSuggestionError] = useState("");
+  const [suggestionNotice, setSuggestionNotice] = useState("");
   const [suggestionSaving, setSuggestionSaving] = useState(false);
+  const [sentSuggestions, setSentSuggestions] = useState([]);
+  const [sentSuggestionsLoading, setSentSuggestionsLoading] = useState(false);
+  const [sentSuggestionsError, setSentSuggestionsError] = useState("");
   const [comments, setComments] = useState([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [commentsError, setCommentsError] = useState("");
@@ -259,8 +282,13 @@ export default function Friends({ session, onRequestsCount }) {
     setIsSuggesting(false);
     setSuggestionGroupId("");
     setSuggestionPlayerId("");
+    setSuggestionSearch("");
     setSuggestionReason("");
     setSuggestionError("");
+    setSuggestionNotice("");
+    setSentSuggestions([]);
+    setSentSuggestionsLoading(false);
+    setSentSuggestionsError("");
     setComments([]);
     setCommentsError("");
     setCommentBody("");
@@ -311,6 +339,44 @@ export default function Friends({ session, onRequestsCount }) {
     };
 
     loadComments();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [accessToken, friendBoard?.id]);
+
+  useEffect(() => {
+    if (!accessToken || !friendBoard?.id) {
+      setSentSuggestions([]);
+      setSentSuggestionsLoading(false);
+      setSentSuggestionsError("");
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadSentSuggestions = async () => {
+      setSentSuggestionsLoading(true);
+      setSentSuggestionsError("");
+
+      const { data, error } = await fetchSuggestions({
+        accessToken,
+        boardId: friendBoard.id,
+      });
+
+      if (!isMounted) return;
+
+      if (error) {
+        setSentSuggestionsError(error.message);
+        setSentSuggestionsLoading(false);
+        return;
+      }
+
+      setSentSuggestions(data?.suggestions ?? []);
+      setSentSuggestionsLoading(false);
+    };
+
+    loadSentSuggestions();
 
     return () => {
       isMounted = false;
@@ -424,7 +490,30 @@ export default function Friends({ session, onRequestsCount }) {
     activeSuggestionGroup && activeSuggestionIndex >= 0
       ? getOptionsForGroup(activeSuggestionGroup, activeSuggestionIndex)
       : null;
-  const suggestionPlayers = suggestionOptionGroup?.players ?? [];
+  const suggestionPlayers = useMemo(
+    () => suggestionOptionGroup?.players ?? [],
+    [suggestionOptionGroup]
+  );
+  const suggestionSearchValue = suggestionSearch.trim().toLowerCase();
+  const filteredSuggestionPlayers = useMemo(() => {
+    if (!suggestionSearchValue) return suggestionPlayers;
+    return suggestionPlayers.filter((player) => {
+      const searchable = [
+        player.fullName,
+        player.teamCode,
+        player.opponentTeam,
+        player.position,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return searchable.includes(suggestionSearchValue);
+    });
+  }, [suggestionPlayers, suggestionSearchValue]);
+  const pendingSentSuggestionsCount = useMemo(
+    () => sentSuggestions.filter((suggestion) => suggestion.status === "pending").length,
+    [sentSuggestions]
+  );
   const activeGroupPick = activeSuggestionGroup
     ? friendPickByGroup.get(activeSuggestionGroup.id)
     : null;
@@ -482,8 +571,10 @@ export default function Friends({ session, onRequestsCount }) {
     if (!friendBoard || !canSuggestFriend) return;
     setSuggestionGroupId(groupId || friendGroups[0]?.id || "");
     setSuggestionPlayerId("");
+    setSuggestionSearch("");
     setSuggestionReason("");
     setSuggestionError("");
+    setSuggestionNotice("");
     setOptionsError("");
     setIsSuggesting(true);
   };
@@ -499,20 +590,32 @@ export default function Friends({ session, onRequestsCount }) {
       return;
     }
 
+    const nextPlayerId = Number(suggestionPlayerId);
     const currentPick = friendPickByGroup.get(suggestionGroupId);
-    if (currentPick?.playerId === Number(suggestionPlayerId)) {
+    if (currentPick?.playerId === nextPlayerId) {
       setSuggestionError("That player is already selected.");
+      return;
+    }
+    const hasPendingDuplicate = sentSuggestions.some(
+      (suggestion) =>
+        suggestion.status === "pending" &&
+        suggestion.boardGroupId === suggestionGroupId &&
+        Number(suggestion.nhlPlayerId) === nextPlayerId
+    );
+    if (hasPendingDuplicate) {
+      setSuggestionError("You already sent that pending suggestion.");
       return;
     }
 
     setSuggestionSaving(true);
     setSuggestionError("");
+    setSuggestionNotice("");
 
-    const { error } = await createSuggestion({
+    const { data, error } = await createSuggestion({
       accessToken,
       boardId: friendBoard.id,
       boardGroupId: suggestionGroupId,
-      playerId: Number(suggestionPlayerId),
+      playerId: nextPlayerId,
       reason: suggestionReason,
     });
 
@@ -522,11 +625,18 @@ export default function Friends({ session, onRequestsCount }) {
       return;
     }
 
+    const createdSuggestion = data?.suggestion;
+    if (createdSuggestion) {
+      setSentSuggestions((prev) => [createdSuggestion, ...prev]);
+    }
+
     setSuggestionSaving(false);
     setIsSuggesting(false);
     setSuggestionPlayerId("");
+    setSuggestionSearch("");
     setSuggestionReason("");
     setSuggestionError("");
+    setSuggestionNotice("Suggestion sent. Track it in your history below.");
   };
 
   const handleCommentSubmit = async (event) => {
@@ -586,27 +696,25 @@ export default function Friends({ session, onRequestsCount }) {
   };
 
   const renderEmptyState = (message) => (
-    <div className="rounded-2xl border border-dashed border-white/80 bg-white/70 px-4 py-6 text-center text-sm text-[color:var(--muted)]">
+    <div className="empty-state">
       {message}
     </div>
   );
 
   return (
     <div className="space-y-5">
-      <section className="glass-card rounded-3xl p-5">
-        <p className="text-[10px] uppercase tracking-[0.35em] text-[color:var(--muted)]">
-          Social
-        </p>
-        <h1 className="font-display text-3xl uppercase">Friends</h1>
+      <section className="glass-card rounded-3xl p-5 md:p-6">
+        <p className="kicker">Social</p>
+        <h1 className="font-display text-4xl leading-none">Friends</h1>
         <p className="text-sm text-[color:var(--muted)]">
           Invite friends and swap suggestions in real time.
         </p>
       </section>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <section className="glass-card rounded-3xl p-5 space-y-3">
+        <section className="glass-card rounded-3xl p-5 md:p-6 space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="font-display text-2xl uppercase">Your Crew</h2>
+            <h2 className="font-display text-3xl leading-none">Your crew</h2>
             <button
               type="button"
               onClick={() => {
@@ -615,7 +723,7 @@ export default function Friends({ session, onRequestsCount }) {
                 setInviteNotice("");
               }}
               disabled={!accessToken}
-              className="rounded-full border border-white/70 bg-white/70 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)] shadow-sm hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+              className="btn-secondary rounded-full px-4 py-2 text-xs tracking-[0.08em]"
             >
               {isInviteOpen ? "Close" : "Invite"}
             </button>
@@ -626,7 +734,7 @@ export default function Friends({ session, onRequestsCount }) {
               className="rounded-2xl border border-white/80 bg-white/70 p-4"
               onSubmit={handleInviteSubmit}
             >
-              <label className="text-[10px] uppercase tracking-[0.28em] text-[color:var(--muted)]">
+              <label className="text-xs font-semibold tracking-[0.08em] text-[color:var(--muted)]">
                 Email
               </label>
               <div className="mt-2 flex flex-col gap-2 sm:flex-row">
@@ -634,12 +742,12 @@ export default function Friends({ session, onRequestsCount }) {
                   value={inviteEmail}
                   onChange={(event) => setInviteEmail(event.target.value)}
                   placeholder="name@email.com"
-                  className="flex-1 rounded-2xl border border-white/80 bg-white/90 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-white/80"
+                  className="flex-1 field-input"
                 />
                 <button
                   type="submit"
                   disabled={isInviting}
-                  className="rounded-2xl bg-[linear-gradient(135deg,_#0f172a,_#1d4ed8)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-white shadow-[0_12px_26px_rgba(15,23,42,0.25)] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="btn-primary w-full px-4 py-2 sm:w-auto"
                 >
                   {isInviting ? "Sending..." : "Send Invite"}
                 </button>
@@ -691,10 +799,10 @@ export default function Friends({ session, onRequestsCount }) {
                     )}
         </section>
 
-        <section className="glass-card rounded-3xl p-5 space-y-3">
+        <section className="glass-card rounded-3xl p-5 md:p-6 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <h2 className="font-display text-2xl uppercase">Requests</h2>
+              <h2 className="font-display text-3xl leading-none">Requests</h2>
               {requests.length > 0 ? (
                 <span className="h-2 w-2 rounded-full bg-[color:var(--accent)]" />
               ) : null}
@@ -728,7 +836,7 @@ export default function Friends({ session, onRequestsCount }) {
                                     .toUpperCase()}
                                 </div>
                                 <div>
-                                  <div className="text-[9px] uppercase tracking-[0.28em] text-[color:var(--muted)]">
+                                  <div className="text-xs font-semibold tracking-[0.08em] text-[color:var(--muted)]">
                                     Request
                                   </div>
                                   <div className="text-sm font-semibold text-[color:var(--ink)]">
@@ -743,7 +851,7 @@ export default function Friends({ session, onRequestsCount }) {
                                     handleRequestAction(request.id, "accepted")
                                   }
                                   disabled={requestActionId === request.id}
-                                  className="min-w-[88px] rounded-full bg-[color:var(--ink)] px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-white shadow-[0_10px_18px_rgba(15,23,42,0.2)] disabled:cursor-not-allowed disabled:opacity-60"
+                                  className="btn-primary min-w-[88px] rounded-full px-4 py-2 text-xs tracking-[0.08em]"
                                 >
                                   Accept
                                 </button>
@@ -753,7 +861,7 @@ export default function Friends({ session, onRequestsCount }) {
                                     handleRequestAction(request.id, "declined")
                                   }
                                   disabled={requestActionId === request.id}
-                                  className="min-w-[88px] rounded-full border border-white/80 bg-white/90 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)] shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+                                  className="btn-secondary min-w-[88px] rounded-full px-4 py-2 text-xs tracking-[0.08em]"
                                 >
                                   Decline
                                 </button>
@@ -771,11 +879,11 @@ export default function Friends({ session, onRequestsCount }) {
         </section>
       </div>
 
-      <section className="glass-card rounded-3xl p-5 space-y-4">
+      <section className="glass-card rounded-3xl p-5 md:p-6 space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="font-display text-2xl uppercase">Friend Picks</h2>
-            <p className="text-xs text-[color:var(--muted)]">
+            <h2 className="font-display text-3xl leading-none">Friend picks</h2>
+            <p className="text-sm text-[color:var(--muted)]">
               Review today's picks and send suggestions.
             </p>
           </div>
@@ -796,7 +904,7 @@ export default function Friends({ session, onRequestsCount }) {
                     <select
                       value={selectedFriendId}
                       onChange={(event) => setSelectedFriendId(event.target.value)}
-                      className="flex-1 rounded-2xl border border-white/80 bg-white/90 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-white/80"
+                      className="flex-1 field-select"
                     >
                       {friends.map((friend) => (
                         <option key={friend.id} value={friend.id}>
@@ -808,7 +916,7 @@ export default function Friends({ session, onRequestsCount }) {
                       type="button"
                       onClick={reloadFriendBoard}
                       disabled={friendLoading}
-                      className="rounded-2xl border border-white/80 bg-white/80 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)] disabled:cursor-not-allowed disabled:opacity-60"
+                      className="btn-secondary w-full px-4 py-2 text-xs tracking-[0.08em] sm:w-auto"
                     >
                       {friendLoading ? "Loading..." : "Refresh"}
                     </button>
@@ -847,14 +955,43 @@ export default function Friends({ session, onRequestsCount }) {
                                 })}
                               </div>
 
+                              {suggestionNotice ? (
+                                <div className="rounded-2xl border border-[rgba(30,166,114,0.28)] bg-[rgba(30,166,114,0.1)] px-3 py-2 text-xs text-[color:var(--ink)]">
+                                  {suggestionNotice}
+                                </div>
+                              ) : null}
+
                               {isSuggesting ? (
                                 <form
                                   className="rounded-2xl border border-white/80 bg-white/70 p-4 space-y-3"
                                   onSubmit={handleSuggestionSubmit}
                                 >
+                                  <div>
+                                    <label className="text-xs font-semibold tracking-[0.08em] text-[color:var(--muted)]">
+                                      Search players
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={suggestionSearch}
+                                      onChange={(event) =>
+                                        setSuggestionSearch(event.target.value)
+                                      }
+                                      className="mt-2 field-input"
+                                      placeholder="Type a name or team code"
+                                    />
+                                    {suggestionSearchValue ? (
+                                      <div className="mt-2 text-xs text-[color:var(--muted)]">
+                                        {filteredSuggestionPlayers.length} match
+                                        {filteredSuggestionPlayers.length === 1
+                                          ? ""
+                                          : "es"}
+                                      </div>
+                                    ) : null}
+                                  </div>
+
                                   <div className="grid gap-3 sm:grid-cols-2">
                                     <div>
-                                      <label className="text-[10px] uppercase tracking-[0.28em] text-[color:var(--muted)]">
+                                      <label className="text-xs font-semibold tracking-[0.08em] text-[color:var(--muted)]">
                                         Group
                                       </label>
                                       <select
@@ -863,7 +1000,7 @@ export default function Friends({ session, onRequestsCount }) {
                                           setSuggestionGroupId(event.target.value);
                                           setSuggestionPlayerId("");
                                         }}
-                                        className="mt-2 w-full rounded-2xl border border-white/80 bg-white/90 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-white/80"
+                                        className="mt-2 field-select"
                                       >
                                         {friendGroups.map((group) => (
                                           <option key={group.id} value={group.id}>
@@ -878,7 +1015,7 @@ export default function Friends({ session, onRequestsCount }) {
                                       ) : null}
                                     </div>
                                     <div>
-                                      <label className="text-[10px] uppercase tracking-[0.28em] text-[color:var(--muted)]">
+                                      <label className="text-xs font-semibold tracking-[0.08em] text-[color:var(--muted)]">
                                         Player
                                       </label>
                                       <select
@@ -886,17 +1023,20 @@ export default function Friends({ session, onRequestsCount }) {
                                         onChange={(event) =>
                                           setSuggestionPlayerId(event.target.value)
                                         }
-                                        className="mt-2 w-full rounded-2xl border border-white/80 bg-white/90 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-white/80"
-                                        disabled={optionsLoading || suggestionPlayers.length === 0}
+                                        className="mt-2 field-select"
+                                        disabled={
+                                          optionsLoading ||
+                                          filteredSuggestionPlayers.length === 0
+                                        }
                                       >
                                         <option value="">
                                           {optionsLoading
                                             ? "Loading players..."
-                                            : suggestionPlayers.length
+                                            : filteredSuggestionPlayers.length
                                               ? "Select a player"
-                                              : "No players loaded"}
+                                              : "No matching players"}
                                         </option>
-                                        {suggestionPlayers.map((player) => {
+                                        {filteredSuggestionPlayers.map((player) => {
                                           const parts = [];
                                           if (player.teamCode) parts.push(player.teamCode);
                                           if (player.opponentTeam) {
@@ -912,8 +1052,7 @@ export default function Friends({ session, onRequestsCount }) {
                                             : "";
                                           const isCurrentPick =
                                             activeGroupPick?.playerId === player.id;
-                                          const fullName =
-                                            player.fullName || "Player";
+                                          const fullName = player.fullName || "Player";
                                           const label = `${fullName}${meta}${
                                             player.isUnavailable ? " (Out)" : ""
                                           }`;
@@ -940,7 +1079,7 @@ export default function Friends({ session, onRequestsCount }) {
                                     }
                                     placeholder="Reason (optional)"
                                     rows={2}
-                                    className="w-full rounded-2xl border border-white/80 bg-white/90 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-white/80"
+                                    className="field-textarea"
                                   />
 
                                   {optionsError ? (
@@ -955,33 +1094,102 @@ export default function Friends({ session, onRequestsCount }) {
                                     </div>
                                   ) : null}
 
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex flex-col gap-2 sm:flex-row">
                                     <button
                                       type="submit"
                                       disabled={suggestionSaving || optionsLoading}
-                                      className="flex-1 rounded-2xl bg-[linear-gradient(135deg,_#0f172a,_#1d4ed8)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-white shadow-[0_12px_26px_rgba(15,23,42,0.25)] disabled:cursor-not-allowed disabled:opacity-60"
+                                      className="flex-1 btn-primary px-4 py-2"
                                     >
                                       {suggestionSaving ? "Sending..." : "Send Suggestion"}
                                     </button>
                                     <button
                                       type="button"
-                                      onClick={() => setIsSuggesting(false)}
-                                      className="rounded-2xl border border-white/80 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)]"
+                                      onClick={() => {
+                                        setIsSuggesting(false);
+                                        setSuggestionSearch("");
+                                        setSuggestionError("");
+                                      }}
+                                      className="btn-secondary w-full px-4 py-2 sm:w-auto"
                                     >
                                       Cancel
                                     </button>
                                   </div>
                                 </form>
                               ) : null}
+
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <div className="text-xs font-semibold tracking-[0.08em] text-[color:var(--muted)]">
+                                    Your suggestions
+                                  </div>
+                                  <div className="text-xs text-[color:var(--muted)]">
+                                    Pending {pendingSentSuggestionsCount} /{" "}
+                                    {sentSuggestions.length}
+                                  </div>
+                                </div>
+
+                                {sentSuggestionsLoading ? (
+                                  renderEmptyState("Loading your suggestions...")
+                                ) : sentSuggestionsError ? (
+                                  <div className="rounded-2xl border border-[rgba(244,68,79,0.3)] bg-[rgba(244,68,79,0.1)] px-3 py-2 text-xs text-[color:var(--accent)]">
+                                    {sentSuggestionsError}
+                                  </div>
+                                ) : sentSuggestions.length === 0 ? (
+                                  renderEmptyState("No suggestions sent yet.")
+                                ) : (
+                                  <div className="space-y-2">
+                                    {sentSuggestions.map((suggestion) => (
+                                      <div
+                                        key={suggestion.id}
+                                        className="surface-card rounded-2xl px-4 py-3"
+                                      >
+                                        <div className="flex items-start justify-between gap-3">
+                                          <div>
+                                            <div className="text-xs font-semibold tracking-[0.08em] text-[color:var(--muted)]">
+                                              {suggestion.groupLabel}
+                                            </div>
+                                            <div className="text-sm font-semibold text-[color:var(--ink)]">
+                                              {suggestion.playerName}
+                                              {suggestion.teamCode
+                                                ? ` - ${suggestion.teamCode}`
+                                                : ""}
+                                            </div>
+                                            {suggestion.reason ? (
+                                              <div className="text-xs text-[color:var(--muted)]">
+                                                "{suggestion.reason}"
+                                              </div>
+                                            ) : null}
+                                          </div>
+                                          <span
+                                            className={[
+                                              "rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-[0.08em]",
+                                              suggestion.status === "pending"
+                                                ? "border border-[rgba(31,102,255,0.28)] bg-[rgba(31,102,255,0.12)] text-[color:var(--ink)]"
+                                                : suggestion.status === "accepted"
+                                                  ? "border border-[rgba(30,166,114,0.3)] bg-[rgba(30,166,114,0.12)] text-[color:var(--ink)]"
+                                                  : "border border-[rgba(227,79,84,0.3)] bg-[rgba(227,79,84,0.12)] text-[color:var(--ink)]",
+                                            ].join(" ")}
+                                          >
+                                            {formatSuggestionStatus(suggestion.status)}
+                                          </span>
+                                        </div>
+                                        <div className="mt-2 text-xs text-[color:var(--muted)]">
+                                          {formatTimestamp(suggestion.createdAt)}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           )}
                 </div>
               )}
       </section>
 
-      <section className="glass-card rounded-3xl p-5 space-y-3">
+      <section className="glass-card rounded-3xl p-5 md:p-6 space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="font-display text-2xl uppercase">Comments</h2>
+          <h2 className="font-display text-3xl leading-none">Comments</h2>
           <span className="text-xs text-[color:var(--muted)]">
             {comments.length}
           </span>
@@ -1022,7 +1230,7 @@ export default function Friends({ session, onRequestsCount }) {
                                             {displayName}
                                           </span>
                                           <span
-                                            className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.2em] text-[color:var(--ink)] ${
+                                            className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-[color:var(--ink)] ${
                                               isMine
                                                 ? "border-[rgba(42,157,244,0.35)] bg-[rgba(42,157,244,0.12)]"
                                                 : "border-[rgba(16,185,129,0.35)] bg-[rgba(16,185,129,0.12)]"
@@ -1059,7 +1267,7 @@ export default function Friends({ session, onRequestsCount }) {
                                               setReplyBody("");
                                               setReplyError("");
                                             }}
-                                            className="rounded-full border border-white/80 bg-white/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-[color:var(--ink)] shadow-sm"
+                                            className="btn-secondary rounded-full px-3 py-1 text-xs tracking-[0.08em]"
                                           >
                                             Reply
                                           </button>
@@ -1068,7 +1276,7 @@ export default function Friends({ session, onRequestsCount }) {
                                     </div>
 
                                     {replies.length ? (
-                                      <div className="space-y-2 pl-6">
+                                      <div className="space-y-2 pl-3 sm:pl-6">
                                         {replies.map((reply) => {
                                           const replyIsMine = reply.userId === userId;
                                           const replyName =
@@ -1088,7 +1296,7 @@ export default function Friends({ session, onRequestsCount }) {
                                                     {replyName}
                                                   </span>
                                                   <span
-                                                    className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.2em] text-[color:var(--ink)] ${
+                                                    className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-[color:var(--ink)] ${
                                                       replyIsMine
                                                         ? "border-[rgba(42,157,244,0.35)] bg-[rgba(42,157,244,0.12)]"
                                                         : "border-[rgba(16,185,129,0.35)] bg-[rgba(16,185,129,0.12)]"
@@ -1123,23 +1331,23 @@ export default function Friends({ session, onRequestsCount }) {
                                         onSubmit={(event) =>
                                           handleReplySubmit(event, comment.id)
                                         }
-                                        className="space-y-2 pl-6"
+                                        className="space-y-2 pl-3 sm:pl-6"
                                       >
                                         <textarea
                                           value={replyBody}
                                           onChange={(event) =>
                                             setReplyBody(event.target.value)
                                           }
-                                          className="w-full rounded-2xl border border-white/80 bg-white/80 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-white/80"
+                                          className="field-textarea"
                                           placeholder="Write a reply..."
                                           rows={2}
                                           disabled={replySaving}
                                         />
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex flex-col gap-2 sm:flex-row">
                                           <button
                                             type="submit"
                                             disabled={replySaving || !replyBody.trim()}
-                                            className="rounded-2xl bg-[linear-gradient(135deg,_#0b1424,_#1f3a60)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-white shadow-[0_12px_26px_rgba(15,23,42,0.25)] disabled:cursor-not-allowed disabled:opacity-60"
+                                            className="btn-primary w-full px-4 py-2 sm:w-auto"
                                           >
                                             {replySaving ? "Sending..." : "Reply"}
                                           </button>
@@ -1150,7 +1358,7 @@ export default function Friends({ session, onRequestsCount }) {
                                               setReplyBody("");
                                               setReplyError("");
                                             }}
-                                            className="rounded-2xl border border-white/80 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)]"
+                                            className="btn-secondary w-full px-4 py-2 sm:w-auto"
                                           >
                                             Cancel
                                           </button>
@@ -1171,7 +1379,7 @@ export default function Friends({ session, onRequestsCount }) {
                                   onClick={() =>
                                     setCommentLimit((prev) => prev + COMMENTS_PAGE_SIZE)
                                   }
-                                  className="w-full rounded-2xl border border-white/80 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)] shadow-sm"
+                                  className="w-full btn-secondary px-4 py-2 shadow-sm"
                                 >
                                   Show more comments
                                 </button>
@@ -1184,16 +1392,16 @@ export default function Friends({ session, onRequestsCount }) {
             <textarea
               value={commentBody}
               onChange={(event) => setCommentBody(event.target.value)}
-              className="w-full rounded-2xl border border-white/80 bg-white/80 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-white/80"
+              className="field-textarea"
               placeholder="Write a comment..."
               rows={2}
               disabled={commentSaving}
             />
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <button
                 type="submit"
                 disabled={commentSaving || !commentBody.trim()}
-                className="rounded-2xl bg-[linear-gradient(135deg,_#0f172a,_#1d4ed8)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-white shadow-[0_12px_26px_rgba(15,23,42,0.25)] disabled:cursor-not-allowed disabled:opacity-60"
+                className="btn-primary w-full px-4 py-2 sm:w-auto"
               >
                 {commentSaving ? "Sending..." : "Send"}
               </button>
@@ -1209,3 +1417,4 @@ export default function Friends({ session, onRequestsCount }) {
     </div>
   );
 }
+

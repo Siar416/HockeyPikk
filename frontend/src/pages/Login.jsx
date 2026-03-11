@@ -1,28 +1,26 @@
 export default function Login({ onSubmit, onSwitch, onGuest, error }) {
   return (
-    <section className="glass-card rounded-3xl p-6">
+    <section className="glass-card rounded-3xl p-6 sm:p-7">
       <div className="flex items-center gap-3">
-        <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[conic-gradient(from_180deg,_#0ea5e9,_#22d3ee,_#f97316,_#0ea5e9)] text-white font-display text-xl">
+        <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[linear-gradient(145deg,_#12346a,_#1f66ff)] text-white font-display text-xl">
           HP
         </div>
         <div>
-          <p className="text-[10px] uppercase tracking-[0.35em] text-[color:var(--muted)]">
-            Welcome
-          </p>
-          <h1 className="font-display text-3xl uppercase">Sign In</h1>
+          <p className="kicker">Welcome back</p>
+          <h1 className="font-display text-4xl leading-none">Sign in</h1>
         </div>
       </div>
       <p className="mt-3 text-sm text-[color:var(--muted)]">
-        Share today&apos;s picks, collect suggestions, and lock your board.
+        Check today&apos;s board, compare picks with friends, and lock in your lineup.
       </p>
 
-      <div className="mt-5 h-px w-full bg-[rgba(15,23,42,0.08)]" />
+      <div className="mt-5 h-px w-full bg-[rgba(16,33,57,0.1)]" />
 
       <form className="mt-5 space-y-4" onSubmit={onSubmit}>
         <div className="space-y-2">
           <label
             htmlFor="login-email"
-            className="block text-[11px] uppercase tracking-[0.25em] text-[color:var(--muted)]"
+            className="block text-xs font-semibold tracking-[0.08em] text-[color:var(--muted)]"
           >
             Email
           </label>
@@ -33,26 +31,17 @@ export default function Login({ onSubmit, onSwitch, onGuest, error }) {
             placeholder="you@rinkmail.com"
             autoComplete="email"
             required
-            className="w-full rounded-2xl border border-white/80 bg-white/80 px-4 py-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-white/80"
+            className="field-input"
           />
         </div>
 
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label
-              htmlFor="login-password"
-              className="block text-[11px] uppercase tracking-[0.25em] text-[color:var(--muted)]"
-            >
-              Password
-            </label>
-            <button
-              type="button"
-              className="text-[11px] text-[color:var(--muted)] hover:text-[color:var(--ink)]"
-            >
-              Forgot password?
-              {/* TODO: connect Supabase reset password flow */}
-            </button>
-          </div>
+          <label
+            htmlFor="login-password"
+            className="block text-xs font-semibold tracking-[0.08em] text-[color:var(--muted)]"
+          >
+            Password
+          </label>
           <input
             id="login-password"
             type="password"
@@ -60,21 +49,21 @@ export default function Login({ onSubmit, onSwitch, onGuest, error }) {
             placeholder="Enter your password"
             autoComplete="current-password"
             required
-            className="w-full rounded-2xl border border-white/80 bg-white/80 px-4 py-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-white/80"
+            className="field-input"
           />
         </div>
 
         <div className="space-y-3 pt-2">
           <button
             type="submit"
-            className="w-full rounded-2xl bg-[linear-gradient(135deg,_#0f172a,_#1d4ed8)] py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-white shadow-[0_14px_28px_rgba(15,23,42,0.25)] sm:text-xs sm:tracking-[0.28em]"
+            className="btn-primary w-full py-3 text-sm tracking-[0.1em]"
           >
             Sign In
           </button>
           <button
             type="button"
             onClick={onGuest}
-            className="w-full rounded-2xl border border-white/80 bg-white/70 py-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--ink)] sm:text-xs sm:tracking-[0.28em]"
+            className="btn-secondary w-full py-3 text-sm tracking-[0.1em]"
           >
             Continue as Guest
           </button>
@@ -82,19 +71,19 @@ export default function Login({ onSubmit, onSwitch, onGuest, error }) {
         {error ? (
           <p
             role="alert"
-            className="rounded-2xl border border-[rgba(244,68,79,0.3)] bg-[rgba(244,68,79,0.1)] px-3 py-2 text-xs text-[color:var(--accent)]"
+            className="rounded-2xl border border-[rgba(227,79,84,0.3)] bg-[rgba(227,79,84,0.1)] px-3 py-2 text-sm text-[color:var(--accent)]"
           >
             {error}
           </p>
         ) : null}
       </form>
 
-      <div className="pt-4 text-center text-xs text-[color:var(--muted)]">
+      <div className="pt-4 text-center text-sm text-[color:var(--muted)]">
         New here?{" "}
         <button
           type="button"
           onClick={onSwitch}
-          className="font-semibold text-[color:var(--ink)]"
+          className="font-semibold text-[color:var(--ink)] underline-offset-4 hover:underline"
         >
           Create an account
         </button>

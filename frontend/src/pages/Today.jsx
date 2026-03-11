@@ -202,6 +202,7 @@ export default function Today({
   const [saveError, setSaveError] = useState("");
   const [isLocking, setIsLocking] = useState(false);
   const [lockError, setLockError] = useState("");
+  const [showLockConfirm, setShowLockConfirm] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [suggestionsLoaded, setSuggestionsLoaded] = useState(false);
@@ -209,11 +210,14 @@ export default function Today({
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [suggestionGroupId, setSuggestionGroupId] = useState("");
   const [suggestionPlayerId, setSuggestionPlayerId] = useState("");
+  const [suggestionSearch, setSuggestionSearch] = useState("");
   const [suggestionReason, setSuggestionReason] = useState("");
+  const [suggestionNotice, setSuggestionNotice] = useState("");
   const [suggestionFormError, setSuggestionFormError] = useState("");
   const [suggestionSaving, setSuggestionSaving] = useState(false);
   const [suggestionActionId, setSuggestionActionId] = useState(null);
   const [suggestionActionError, setSuggestionActionError] = useState("");
+  const [suggestionFilter, setSuggestionFilter] = useState("pending");
   const [comments, setComments] = useState([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [commentsError, setCommentsError] = useState("");
@@ -246,6 +250,7 @@ export default function Today({
       setSaveError("");
       setIsLocking(false);
       setLockError("");
+      setShowLockConfirm(false);
       setSuggestions([]);
       setSuggestionsLoading(false);
       setSuggestionsLoaded(false);
@@ -253,11 +258,14 @@ export default function Today({
       setIsSuggesting(false);
       setSuggestionGroupId("");
       setSuggestionPlayerId("");
+      setSuggestionSearch("");
       setSuggestionReason("");
+      setSuggestionNotice("");
       setSuggestionFormError("");
       setSuggestionSaving(false);
       setSuggestionActionId(null);
       setSuggestionActionError("");
+      setSuggestionFilter("pending");
       setComments([]);
       setCommentsLoading(false);
       setCommentsError("");
@@ -498,6 +506,10 @@ export default function Today({
   const lockedAtLabel = formatTimeLabel(board?.lock_at);
   const lockTimeLabel = lockByLabel || formatTimeLabel(board?.lock_at) || "7:00 PM";
   const groupCount = hasBackend ? orderedGroups.length : samplePicks.length;
+  const selectedGroupCount = useMemo(
+    () => new Set(picks.map((pick) => pick.boardGroupId).filter(Boolean)).size,
+    [picks]
+  );
   const selectedCount = useMemo(() => {
     if (!hasBackend) return samplePicks.length;
     if (isEditing) {
@@ -536,11 +548,46 @@ export default function Today({
     activeSuggestionGroup && activeSuggestionIndex >= 0
       ? getOptionsForGroup(activeSuggestionGroup, activeSuggestionIndex)
       : null;
-  const suggestionPlayers = suggestionOptionGroup?.players ?? [];
+  const suggestionPlayers = useMemo(
+    () => suggestionOptionGroup?.players ?? [],
+    [suggestionOptionGroup]
+  );
+  const currentSuggestionPick = activeSuggestionGroup
+    ? picks.find((pick) => pick.boardGroupId === activeSuggestionGroup.id)
+    : null;
+  const suggestionSearchValue = suggestionSearch.trim().toLowerCase();
+  const filteredSuggestionPlayers = useMemo(() => {
+    if (!suggestionSearchValue) return suggestionPlayers;
+    return suggestionPlayers.filter((player) => {
+      const searchable = [
+        player.fullName,
+        player.teamCode,
+        player.opponentTeam,
+        player.position,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return searchable.includes(suggestionSearchValue);
+    });
+  }, [suggestionPlayers, suggestionSearchValue]);
   const pendingSuggestionCount = useMemo(
     () => suggestions.filter((suggestion) => suggestion.status === "pending").length,
     [suggestions]
   );
+  const reviewedSuggestionCount = Math.max(
+    0,
+    suggestions.length - pendingSuggestionCount
+  );
+  const suggestionsToRender = useMemo(() => {
+    if (suggestionFilter === "pending") {
+      return suggestions.filter((suggestion) => suggestion.status === "pending");
+    }
+    if (suggestionFilter === "reviewed") {
+      return suggestions.filter((suggestion) => suggestion.status !== "pending");
+    }
+    return suggestions;
+  }, [suggestionFilter, suggestions]);
   const { topLevelComments, repliesByParent } = useMemo(() => {
     const topLevel = [];
     const repliesMap = new Map();
@@ -599,6 +646,22 @@ export default function Today({
     }
   }, [canCreateSuggestions, isSuggesting]);
 
+  useEffect(() => {
+    if (suggestions.length === 0) {
+      setSuggestionFilter("pending");
+      return;
+    }
+    if (suggestionFilter === "pending" && pendingSuggestionCount === 0) {
+      setSuggestionFilter("all");
+    }
+  }, [pendingSuggestionCount, suggestionFilter, suggestions.length]);
+
+  useEffect(() => {
+    if (!canLock || isLocked) {
+      setShowLockConfirm(false);
+    }
+  }, [canLock, isLocked]);
+
   const startEditing = () => {
     if (!canEdit) return;
     setSelections(buildInitialSelections(orderedGroups, picks));
@@ -656,8 +719,25 @@ export default function Today({
     setIsEditing(false);
   };
 
-  const handleLockPicks = async () => {
+  const handleLockPicks = () => {
     if (!board?.id || !canLock || isLocking) return;
+    if (isEditing) {
+      setLockError("Save or cancel your edits before locking picks.");
+      return;
+    }
+    if (orderedGroups.length > 0 && selectedGroupCount < orderedGroups.length) {
+      setLockError(
+        `Pick all groups before locking (${selectedGroupCount}/${orderedGroups.length} selected).`
+      );
+      return;
+    }
+    setShowLockConfirm(true);
+    setLockError("");
+  };
+
+  const confirmLockPicks = async () => {
+    if (!board?.id || !canLock || isLocking) return;
+    setShowLockConfirm(false);
     setIsLocking(true);
     setLockError("");
 
@@ -682,6 +762,7 @@ export default function Today({
 
     setIsEditing(false);
     setIsSuggesting(false);
+    setSuggestionNotice("");
     setIsLocking(false);
   };
 
@@ -689,7 +770,9 @@ export default function Today({
     if (!canCreateSuggestions) return;
     setSuggestionGroupId(groupId || orderedGroups[0]?.id || "");
     setSuggestionPlayerId("");
+    setSuggestionSearch("");
     setSuggestionReason("");
+    setSuggestionNotice("");
     setSuggestionFormError("");
     setSuggestionActionError("");
     setOptionsError("");
@@ -698,6 +781,7 @@ export default function Today({
 
   const cancelSuggesting = () => {
     setIsSuggesting(false);
+    setSuggestionSearch("");
     setSuggestionFormError("");
   };
 
@@ -707,15 +791,34 @@ export default function Today({
       setSuggestionFormError("Select a group and player.");
       return;
     }
+    const nextPlayerId = Number(suggestionPlayerId);
+    const groupCurrentPick = picks.find(
+      (pick) => pick.boardGroupId === suggestionGroupId
+    );
+    if (groupCurrentPick?.playerId === nextPlayerId) {
+      setSuggestionFormError("That player is already the current pick.");
+      return;
+    }
+    const hasPendingDuplicate = suggestions.some(
+      (suggestion) =>
+        suggestion.status === "pending" &&
+        suggestion.boardGroupId === suggestionGroupId &&
+        Number(suggestion.nhlPlayerId) === nextPlayerId
+    );
+    if (hasPendingDuplicate) {
+      setSuggestionFormError("A pending suggestion for that player already exists.");
+      return;
+    }
 
     setSuggestionSaving(true);
     setSuggestionFormError("");
+    setSuggestionNotice("");
 
     const { data, error } = await createSuggestion({
       accessToken,
       boardId: board.id,
       boardGroupId: suggestionGroupId,
-      playerId: Number(suggestionPlayerId),
+      playerId: nextPlayerId,
       reason: suggestionReason,
     });
 
@@ -736,8 +839,10 @@ export default function Today({
 
     setSuggestionSaving(false);
     setIsSuggesting(false);
+    setSuggestionSearch("");
     setSuggestionReason("");
     setSuggestionPlayerId("");
+    setSuggestionNotice("Suggestion sent. The board owner can review it now.");
   };
 
   const handleSuggestionAction = async (suggestionId, status) => {
@@ -789,6 +894,11 @@ export default function Today({
     }
 
     setSuggestionActionId(null);
+    setSuggestionNotice(
+      nextStatus === "accepted"
+        ? "Suggestion accepted and pick updated."
+        : "Suggestion declined."
+    );
   };
 
   const handleCommentSubmit = async (event) => {
@@ -859,13 +969,11 @@ export default function Today({
   return (
     <div className="space-y-5">
       {/* Page header */}
-      <section className="glass-card rounded-3xl p-5 motion-safe:animate-fade-up">
+      <section className="glass-card rounded-3xl p-5 md:p-6 motion-safe:animate-fade-up">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-[10px] uppercase tracking-[0.35em] text-[color:var(--muted)]">
-              Today
-            </p>
-            <h1 className="font-display text-4xl uppercase leading-none">
+            <p className="kicker">Today</p>
+            <h1 className="font-display text-5xl leading-none">
               {dateLabel}
             </h1>
             <p className="text-sm text-[color:var(--muted)]">
@@ -874,8 +982,8 @@ export default function Today({
           </div>
 
           <div className="flex flex-col items-end gap-2">
-            <span className="text-[10px] uppercase tracking-[0.35em] text-[color:var(--muted)]">
-              Status
+            <span className="text-xs font-semibold tracking-[0.08em] text-[color:var(--muted)]">
+              Board status
             </span>
             <span
               className={`rounded-full px-3 py-1 text-xs font-semibold shadow-[0_8px_18px_rgba(15,23,42,0.12)] ${statusPillStyles}`}
@@ -886,18 +994,18 @@ export default function Today({
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2 text-xs text-[color:var(--ink-2)]">
-          <span className="rounded-full border border-white/70 bg-white/85 px-3 py-1 shadow-sm">
+          <span className="chip">
             {groupCount} groups
           </span>
-          <span className="rounded-full border border-white/70 bg-white/85 px-3 py-1 shadow-sm">
+          <span className="chip">
             {counts.comments} comments
           </span>
           {isLocked ? (
-            <span className="rounded-full border border-white/70 bg-white/85 px-3 py-1 shadow-sm">
+            <span className="chip">
               Picks were locked in {lockedAtLabel ? `at ${lockedAtLabel}` : ""}
             </span>
           ) : (
-            <span className="rounded-full border border-white/70 bg-white/85 px-3 py-1 shadow-sm">
+            <span className="chip">
               Lock by {lockTimeLabel}
             </span>
           )}
@@ -911,12 +1019,12 @@ export default function Today({
       </section>
 
       {/* Your Picks */}
-      <section className="glass-card rounded-3xl p-5 space-y-4 motion-safe:animate-fade-up anim-delay-80">
+      <section className="glass-card rounded-3xl p-5 md:p-6 space-y-4 motion-safe:animate-fade-up anim-delay-80">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="font-display text-2xl uppercase">Your Picks</h2>
-            <p className="text-xs text-[color:var(--muted)]">
-              {groupCount} groups - {selectedCount}/{groupCount} selected
+            <h2 className="font-display text-3xl leading-none">Your picks</h2>
+            <p className="text-sm text-[color:var(--muted)]">
+              {selectedCount}/{groupCount} selected
             </p>
           </div>
 
@@ -924,14 +1032,14 @@ export default function Today({
             type="button"
             onClick={isEditing ? cancelEditing : startEditing}
             disabled={!canEdit || isSaving}
-            className="rounded-full border border-white/70 bg-white/70 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)] shadow-sm hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+            className="btn-secondary rounded-full px-4 py-2 text-xs tracking-[0.08em]"
           >
             {isEditing ? "Cancel" : "Edit"}
           </button>
         </div>
 
         {hasBackend && isLoading ? (
-          <div className="rounded-2xl border border-dashed border-white/80 bg-white/70 px-4 py-6 text-center text-sm text-[color:var(--muted)]">
+          <div className="empty-state">
             Loading picks...
           </div>
         ) : null}
@@ -939,7 +1047,7 @@ export default function Today({
         {isEditing ? (
           <div className="space-y-4">
             {optionsLoading ? (
-              <div className="rounded-2xl border border-dashed border-white/80 bg-white/70 px-4 py-6 text-center text-sm text-[color:var(--muted)]">
+              <div className="empty-state">
                 Loading players...
               </div>
             ) : null}
@@ -957,7 +1065,7 @@ export default function Today({
                 </div>
 
                 {orderedGroups.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-white/80 bg-white/70 px-4 py-6 text-center text-sm text-[color:var(--muted)]">
+                  <div className="empty-state">
                     No groups available yet.
                   </div>
                 ) : (
@@ -970,7 +1078,7 @@ export default function Today({
                           key={group.id}
                           className="rounded-2xl border border-white/70 bg-white/80 p-5 shadow-[0_12px_24px_rgba(15,23,42,0.08)]"
                         >
-                          <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.28em] text-[color:var(--muted)]">
+                          <div className="flex items-center justify-between text-xs font-semibold tracking-[0.08em] text-[color:var(--muted)]">
                             <span>{group.label}</span>
                             <span>{players.length} players</span>
                           </div>
@@ -979,7 +1087,7 @@ export default function Today({
                             onChange={(event) =>
                               handleSelectionChange(group.id, event.target.value)
                             }
-                            className="mt-4 w-full rounded-2xl border border-white/80 bg-white/90 px-3 py-3 text-sm text-[color:var(--ink)] shadow-sm focus:outline-none focus:ring-2 focus:ring-white/80"
+                            className="mt-4 field-select"
                           >
                             <option value="">Select a player</option>
                             {players.map((player) => {
@@ -1022,18 +1130,18 @@ export default function Today({
                   </div>
                 ) : null}
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row">
                   <button
                     type="submit"
                     disabled={isSaving || optionsLoading}
-                    className="flex-1 rounded-2xl bg-[linear-gradient(135deg,_#0f172a,_#1d4ed8)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-white shadow-[0_12px_26px_rgba(15,23,42,0.25)] disabled:cursor-not-allowed disabled:opacity-60"
+                    className="flex-1 btn-primary px-4 py-2"
                   >
                     {isSaving ? "Saving..." : "Save Picks"}
                   </button>
                   <button
                     type="button"
                     onClick={cancelEditing}
-                    className="rounded-2xl border border-white/80 bg-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)]"
+                    className="btn-secondary w-full px-4 py-2 sm:w-auto"
                   >
                     Cancel
                   </button>
@@ -1042,7 +1150,7 @@ export default function Today({
             ) : null}
           </div>
         ) : showEmptyState ? (
-          <div className="rounded-2xl border border-dashed border-white/80 bg-white/70 px-4 py-6 text-center text-sm text-[color:var(--muted)]">
+          <div className="empty-state">
             No picks yet. Tap Edit to add players.
           </div>
         ) : (
@@ -1063,13 +1171,43 @@ export default function Today({
       </section>
 
       {/* Suggestions */}
-      <section className="glass-card rounded-3xl p-5 space-y-3 motion-safe:animate-fade-up anim-delay-160">
-        <div className="flex items-center justify-between">
-          <h2 className="font-display text-2xl uppercase">Suggestions</h2>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-[color:var(--muted)]">
-              {counts.suggestions}
-            </span>
+      <section className="glass-card rounded-3xl p-5 md:p-6 space-y-3 motion-safe:animate-fade-up anim-delay-160">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="font-display text-3xl leading-none">Suggestions</h2>
+            {canManageSuggestions ? (
+              <p className="mt-1 text-xs text-[color:var(--muted)]">
+                Pending {pendingSuggestionCount} of {suggestions.length} total
+              </p>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {canManageSuggestions && suggestions.length > 0 ? (
+              <div className="flex items-center gap-1 rounded-full border border-white/70 bg-white/80 p-1">
+                {[
+                  { key: "pending", label: "Pending", count: pendingSuggestionCount },
+                  { key: "reviewed", label: "Reviewed", count: reviewedSuggestionCount },
+                  { key: "all", label: "All", count: suggestions.length },
+                ].map((filter) => {
+                  const activeFilter = suggestionFilter === filter.key;
+                  return (
+                    <button
+                      key={filter.key}
+                      type="button"
+                      onClick={() => setSuggestionFilter(filter.key)}
+                      className={[
+                        "rounded-full px-2.5 py-1 text-[11px] font-semibold transition",
+                        activeFilter
+                          ? "bg-[color:var(--ink)] text-white shadow-sm"
+                          : "text-[color:var(--muted)] hover:text-[color:var(--ink)]",
+                      ].join(" ")}
+                    >
+                      {filter.label} ({filter.count})
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
             {canCreateSuggestions ? (
               <button
                 type="button"
@@ -1077,22 +1215,60 @@ export default function Today({
                   isSuggesting ? cancelSuggesting() : startSuggesting()
                 }
                 disabled={!canCreateSuggestions}
-                className="rounded-full border border-white/70 bg-white/70 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-[color:var(--ink)] shadow-sm hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                className="btn-secondary rounded-full px-3 py-1 text-xs tracking-[0.08em]"
               >
                 {isSuggesting ? "Close" : "New"}
               </button>
             ) : null}
           </div>
         </div>
+        {isOwner ? (
+          <div className="rounded-2xl border border-[rgba(31,102,255,0.18)] bg-[rgba(31,102,255,0.07)] px-3 py-2 text-xs text-[color:var(--ink-2)]">
+            Review incoming suggestions and accept the best swap before locking picks.
+          </div>
+        ) : null}
+        {suggestionNotice ? (
+          <div className="rounded-2xl border border-[rgba(30,166,114,0.28)] bg-[rgba(30,166,114,0.1)] px-3 py-2 text-xs text-[color:var(--ink)]">
+            {suggestionNotice}
+          </div>
+        ) : null}
 
         {isSuggesting ? (
           <form
             className="rounded-2xl border border-white/80 bg-white/70 p-4 space-y-3"
             onSubmit={handleSuggestionSubmit}
           >
+            {currentSuggestionPick ? (
+              <div className="rounded-2xl border border-[rgba(16,33,57,0.08)] bg-white/80 px-3 py-2 text-xs text-[color:var(--muted)]">
+                Current pick:{" "}
+                <span className="font-semibold text-[color:var(--ink)]">
+                  {currentSuggestionPick.playerName}
+                </span>
+              </div>
+            ) : null}
+
+            <div>
+              <label className="text-xs font-semibold tracking-[0.08em] text-[color:var(--muted)]">
+                Search players
+              </label>
+              <input
+                type="text"
+                value={suggestionSearch}
+                onChange={(event) => setSuggestionSearch(event.target.value)}
+                className="mt-2 field-input"
+                placeholder="Type a name or team code"
+              />
+              {suggestionSearchValue ? (
+                <div className="mt-2 text-xs text-[color:var(--muted)]">
+                  {filteredSuggestionPlayers.length} match
+                  {filteredSuggestionPlayers.length === 1 ? "" : "es"}
+                </div>
+              ) : null}
+            </div>
+
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label className="text-[10px] uppercase tracking-[0.28em] text-[color:var(--muted)]">
+                <label className="text-xs font-semibold tracking-[0.08em] text-[color:var(--muted)]">
                   Group
                 </label>
                 <select
@@ -1101,7 +1277,7 @@ export default function Today({
                     setSuggestionGroupId(event.target.value);
                     setSuggestionPlayerId("");
                   }}
-                  className="mt-2 w-full rounded-2xl border border-white/80 bg-white/90 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-white/80"
+                  className="mt-2 field-select"
                 >
                   {orderedGroups.map((group) => (
                     <option key={group.id} value={group.id}>
@@ -1111,23 +1287,23 @@ export default function Today({
                 </select>
               </div>
               <div>
-                <label className="text-[10px] uppercase tracking-[0.28em] text-[color:var(--muted)]">
+                <label className="text-xs font-semibold tracking-[0.08em] text-[color:var(--muted)]">
                   Player
                 </label>
                 <select
                   value={suggestionPlayerId}
                   onChange={(event) => setSuggestionPlayerId(event.target.value)}
-                  className="mt-2 w-full rounded-2xl border border-white/80 bg-white/90 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-white/80"
-                  disabled={optionsLoading || suggestionPlayers.length === 0}
+                  className="mt-2 field-select"
+                  disabled={optionsLoading || filteredSuggestionPlayers.length === 0}
                 >
                   <option value="">
                     {optionsLoading
                       ? "Loading players..."
-                      : suggestionPlayers.length
+                      : filteredSuggestionPlayers.length
                         ? "Select a player"
-                        : "No players loaded"}
+                        : "No matching players"}
                   </option>
-                  {suggestionPlayers.map((player) => {
+                  {filteredSuggestionPlayers.map((player) => {
                     const parts = [];
                     if (player.teamCode) parts.push(player.teamCode);
                     if (player.opponentTeam) {
@@ -1161,7 +1337,7 @@ export default function Today({
               onChange={(event) => setSuggestionReason(event.target.value)}
               placeholder="Reason (optional)"
               rows={2}
-              className="w-full rounded-2xl border border-white/80 bg-white/90 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-white/80"
+              className="field-textarea"
             />
 
             {optionsError ? (
@@ -1176,18 +1352,18 @@ export default function Today({
               </div>
             ) : null}
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <button
                 type="submit"
                 disabled={suggestionSaving || optionsLoading}
-                className="flex-1 rounded-2xl bg-[linear-gradient(135deg,_#0f172a,_#1d4ed8)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-white shadow-[0_12px_26px_rgba(15,23,42,0.25)] disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex-1 btn-primary px-4 py-2"
               >
                 {suggestionSaving ? "Sending..." : "Send Suggestion"}
               </button>
               <button
                 type="button"
                 onClick={cancelSuggesting}
-                className="rounded-2xl border border-white/80 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)]"
+                className="btn-secondary w-full px-4 py-2 sm:w-auto"
               >
                 Cancel
               </button>
@@ -1196,11 +1372,11 @@ export default function Today({
         ) : null}
 
         {!hasBackend ? (
-          <div className="rounded-2xl border border-dashed border-white/80 bg-white/70 px-4 py-6 text-center text-sm text-[color:var(--muted)]">
+          <div className="empty-state">
             Sign in to view suggestions.
           </div>
         ) : suggestionsLoading ? (
-          <div className="rounded-2xl border border-dashed border-white/80 bg-white/70 px-4 py-6 text-center text-sm text-[color:var(--muted)]">
+          <div className="empty-state">
             Loading suggestions...
           </div>
         ) : suggestionsError ? (
@@ -1208,19 +1384,23 @@ export default function Today({
             {suggestionsError}
           </div>
         ) : suggestions.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-white/80 bg-white/70 px-4 py-6 text-center text-sm text-[color:var(--muted)]">
+          <div className="empty-state">
             No suggestions yet.
+          </div>
+        ) : suggestionsToRender.length === 0 ? (
+          <div className="empty-state">
+            No {suggestionFilter} suggestions.
           </div>
         ) : (
           <div className="space-y-3">
-            {suggestions.map((suggestion) => (
+            {suggestionsToRender.map((suggestion) => (
               <div
                 key={suggestion.id}
-                className="rounded-2xl border border-white/80 bg-white/70 px-4 py-3"
+                className="surface-card rounded-2xl px-4 py-3"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-[10px] uppercase tracking-[0.28em] text-[color:var(--muted)]">
+                    <div className="text-xs font-semibold tracking-[0.08em] text-[color:var(--muted)]">
                       {suggestion.groupLabel}
                     </div>
                     <div className="text-sm font-semibold text-[color:var(--ink)]">
@@ -1233,7 +1413,16 @@ export default function Today({
                       </div>
                     ) : null}
                   </div>
-                  <span className="rounded-full bg-[rgba(15,23,42,0.08)] px-2 py-1 text-[10px] uppercase tracking-[0.28em] text-[color:var(--muted)]">
+                  <span
+                    className={[
+                      "rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-[0.08em]",
+                      suggestion.status === "pending"
+                        ? "border border-[rgba(31,102,255,0.28)] bg-[rgba(31,102,255,0.12)] text-[color:var(--ink)]"
+                        : suggestion.status === "accepted"
+                          ? "border border-[rgba(30,166,114,0.3)] bg-[rgba(30,166,114,0.12)] text-[color:var(--ink)]"
+                          : "border border-[rgba(227,79,84,0.3)] bg-[rgba(227,79,84,0.12)] text-[color:var(--ink)]",
+                    ].join(" ")}
+                  >
                     {formatSuggestionStatus(suggestion.status)}
                   </span>
                 </div>
@@ -1244,7 +1433,7 @@ export default function Today({
                   <span>{formatTimestamp(suggestion.createdAt)}</span>
                 </div>
                 {suggestion.status === "pending" ? (
-                  <div className="mt-3 flex items-center gap-2">
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
                     <button
                       type="button"
                       onClick={() =>
@@ -1253,7 +1442,7 @@ export default function Today({
                       disabled={
                         !canAcceptSuggestions || suggestionActionId === suggestion.id
                       }
-                      className="rounded-full bg-[color:var(--ink)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-white disabled:cursor-not-allowed disabled:opacity-60"
+                      className="btn-primary rounded-full px-3 py-1 text-xs tracking-[0.08em]"
                     >
                       Accept
                     </button>
@@ -1265,7 +1454,7 @@ export default function Today({
                       disabled={
                         !canManageSuggestions || suggestionActionId === suggestion.id
                       }
-                      className="rounded-full border border-white/80 bg-white/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-[color:var(--ink)] disabled:cursor-not-allowed disabled:opacity-60"
+                      className="btn-secondary rounded-full px-3 py-1 text-xs tracking-[0.08em]"
                     >
                       Decline
                     </button>
@@ -1283,20 +1472,20 @@ export default function Today({
       </section>
 
       {/* Comments */}
-      <section className="glass-card rounded-3xl p-5 space-y-3 motion-safe:animate-fade-up anim-delay-240">
+      <section className="glass-card rounded-3xl p-5 md:p-6 space-y-3 motion-safe:animate-fade-up anim-delay-240">
         <div className="flex items-center justify-between">
-          <h2 className="font-display text-2xl uppercase">Comments</h2>
+          <h2 className="font-display text-3xl leading-none">Comments</h2>
           <span className="text-xs text-[color:var(--muted)]">
             {counts.comments}
           </span>
         </div>
 
         {!hasBackend ? (
-          <div className="rounded-2xl border border-dashed border-white/80 bg-white/70 px-4 py-6 text-center text-sm text-[color:var(--muted)]">
+          <div className="empty-state">
             Sign in to view comments.
           </div>
         ) : commentsLoading ? (
-          <div className="rounded-2xl border border-dashed border-white/80 bg-white/70 px-4 py-6 text-center text-sm text-[color:var(--muted)]">
+          <div className="empty-state">
             Loading comments...
           </div>
         ) : commentsError ? (
@@ -1304,7 +1493,7 @@ export default function Today({
             {commentsError}
           </div>
         ) : comments.length === 0 ? (
-          <div className="rounded-2xl border border-white/80 bg-white/70 px-4 py-6 text-center text-sm text-[color:var(--muted)]">
+          <div className="empty-state">
             No comments yet.
           </div>
         ) : (
@@ -1326,7 +1515,7 @@ export default function Today({
                           {displayName}
                         </span>
                         <span
-                          className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.2em] text-[color:var(--ink)] ${
+                          className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-[color:var(--ink)] ${
                             isMine
                               ? "border-[rgba(42,157,244,0.35)] bg-[rgba(42,157,244,0.12)]"
                               : "border-[rgba(16,185,129,0.35)] bg-[rgba(16,185,129,0.12)]"
@@ -1351,7 +1540,7 @@ export default function Today({
                             setReplyBody("");
                             setReplyError("");
                           }}
-                          className="rounded-full border border-white/80 bg-white/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-[color:var(--ink)] shadow-sm"
+                          className="btn-secondary rounded-full px-3 py-1 text-xs tracking-[0.08em]"
                         >
                           Reply
                         </button>
@@ -1360,7 +1549,7 @@ export default function Today({
                   </div>
 
                   {replies.length ? (
-                    <div className="space-y-2 pl-6">
+                    <div className="space-y-2 pl-3 sm:pl-6">
                       {replies.map((reply) => {
                         const replyIsMine = reply.userId === userId;
                         const replyName =
@@ -1379,7 +1568,7 @@ export default function Today({
                                   {replyName}
                                 </span>
                                 <span
-                                  className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.2em] text-[color:var(--ink)] ${
+                                  className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-[color:var(--ink)] ${
                                     replyIsMine
                                       ? "border-[rgba(42,157,244,0.35)] bg-[rgba(42,157,244,0.12)]"
                                       : "border-[rgba(16,185,129,0.35)] bg-[rgba(16,185,129,0.12)]"
@@ -1402,21 +1591,21 @@ export default function Today({
                   {replyTargetId === comment.id ? (
                     <form
                       onSubmit={(event) => handleReplySubmit(event, comment.id)}
-                      className="space-y-2 pl-6"
+                      className="space-y-2 pl-3 sm:pl-6"
                     >
                       <textarea
                         value={replyBody}
                         onChange={(event) => setReplyBody(event.target.value)}
-                        className="w-full rounded-2xl border border-white/80 bg-white/80 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-white/80"
+                        className="field-textarea"
                         placeholder="Write a reply..."
                         rows={2}
                         disabled={!canComment || replySaving}
                       />
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-col gap-2 sm:flex-row">
                         <button
                           type="submit"
                           disabled={!canComment || replySaving || !replyBody.trim()}
-                          className="rounded-2xl bg-[linear-gradient(135deg,_#0b1424,_#1f3a60)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-white shadow-[0_12px_26px_rgba(15,23,42,0.25)] disabled:cursor-not-allowed disabled:opacity-60"
+                          className="btn-primary w-full px-4 py-2 sm:w-auto"
                         >
                           {replySaving ? "Sending..." : "Reply"}
                         </button>
@@ -1427,7 +1616,7 @@ export default function Today({
                             setReplyBody("");
                             setReplyError("");
                           }}
-                          className="rounded-2xl border border-white/80 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)]"
+                          className="btn-secondary w-full px-4 py-2 sm:w-auto"
                         >
                           Cancel
                         </button>
@@ -1448,7 +1637,7 @@ export default function Today({
                 onClick={() =>
                   setCommentLimit((prev) => prev + COMMENTS_PAGE_SIZE)
                 }
-                className="w-full rounded-2xl border border-white/80 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)] shadow-sm"
+                className="w-full btn-secondary px-4 py-2 shadow-sm"
               >
                 Show more comments
               </button>
@@ -1461,16 +1650,16 @@ export default function Today({
             <textarea
               value={commentBody}
               onChange={(event) => setCommentBody(event.target.value)}
-              className="w-full rounded-2xl border border-white/80 bg-white/80 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-white/80"
+              className="field-textarea"
               placeholder="Write a comment..."
               rows={2}
               disabled={!canComment || commentSaving}
             />
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <button
                 type="submit"
                 disabled={!canComment || commentSaving || !commentBody.trim()}
-                className="rounded-2xl bg-[linear-gradient(135deg,_#0f172a,_#1d4ed8)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-white shadow-[0_12px_26px_rgba(15,23,42,0.25)] disabled:cursor-not-allowed disabled:opacity-60"
+                className="btn-primary w-full px-4 py-2 sm:w-auto"
               >
                 {commentSaving ? "Sending..." : "Send"}
               </button>
@@ -1486,15 +1675,47 @@ export default function Today({
 
       {/* Lock button (scrolls normally now) */}
       <div className="pt-2 motion-safe:animate-fade-up anim-delay-320">
+        {showLockConfirm ? (
+          <div className="surface-card mb-3 rounded-2xl px-4 py-3">
+            <div className="text-sm font-semibold text-[color:var(--ink)]">
+              Confirm lock
+            </div>
+            <div className="mt-1 text-xs text-[color:var(--muted)]">
+              Locking finalizes your board and accepts no more edits.
+            </div>
+            <div className="mt-2 text-xs text-[color:var(--ink-2)]">
+              Selected groups: {selectedGroupCount}/{orderedGroups.length}
+            </div>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => setShowLockConfirm(false)}
+                className="btn-secondary w-full px-4 py-2 sm:w-auto"
+              >
+                Keep editing
+              </button>
+              <button
+                type="button"
+                onClick={confirmLockPicks}
+                disabled={isLocking}
+                className="btn-danger w-full px-4 py-2 sm:w-auto"
+              >
+                {isLocking ? "Locking..." : "Yes, lock picks"}
+              </button>
+            </div>
+          </div>
+        ) : null}
         <button
           type="button"
           onClick={handleLockPicks}
           disabled={!canLock || isLocking}
-          className="w-full rounded-2xl bg-[linear-gradient(135deg,_#f04e4e,_#ffb454)] py-3 font-display text-lg uppercase tracking-[0.35em] text-white shadow-[0_18px_40px_rgba(240,78,78,0.32)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_50px_rgba(240,78,78,0.42)] disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0 disabled:hover:shadow-[0_18px_40px_rgba(240,78,78,0.32)]"
+          className="btn-danger w-full py-3 text-sm tracking-[0.1em]"
         >
-          {isLocked ? "Picks Locked" : isLocking ? "Locking..." : "Lock Picks"}
-          {/* TODO: lock picks action (only owner can lock) */}
-          {/* TODO: confirm dialog + require all groups filled */}
+          {isLocked
+            ? "Picks locked"
+            : showLockConfirm
+              ? "Review lock details"
+              : "Lock picks"}
         </button>
         {lockError ? (
           <div className="mt-3 rounded-2xl border border-[rgba(244,68,79,0.3)] bg-[rgba(244,68,79,0.1)] px-3 py-2 text-xs text-[color:var(--accent)]">
@@ -1505,4 +1726,5 @@ export default function Today({
     </div>
   );
 }
+
 

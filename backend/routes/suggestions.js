@@ -89,17 +89,40 @@ router.get("/", requireSupabase, requireAuth, async (req, res) => {
     return res.status(500).json({ error: formatSchemaError(boardError) });
   }
 
-  if (!board || board.created_by !== userId) {
+  if (!board) {
     return res.status(404).json({ error: "Board not found." });
   }
 
-  const { data: suggestionRows, error: suggestionsError } = await supabase
+  const isOwner = board.created_by === userId;
+
+  if (!isOwner) {
+    const { isFriend, error: friendError } = await areFriends(supabase, {
+      userId,
+      friendId: board.created_by,
+    });
+
+    if (friendError) {
+      return res.status(500).json({ error: formatSchemaError(friendError) });
+    }
+
+    if (!isFriend) {
+      return res.status(403).json({ error: "Not authorized." });
+    }
+  }
+
+  let suggestionQuery = supabase
     .from("suggestions")
     .select(
       "id, board_id, board_group_id, suggested_by, nhl_player_id, player_name, team_code, team_name, reason, status, created_at, board_groups (label, sort_order)"
     )
     .eq("board_id", boardId)
     .order("created_at", { ascending: false });
+
+  if (!isOwner) {
+    suggestionQuery = suggestionQuery.eq("suggested_by", userId);
+  }
+
+  const { data: suggestionRows, error: suggestionsError } = await suggestionQuery;
 
   if (suggestionsError) {
     return res.status(500).json({ error: formatSchemaError(suggestionsError) });
@@ -124,24 +147,41 @@ router.get("/", requireSupabase, requireAuth, async (req, res) => {
     (profiles || []).map((profile) => [profile.id, profile])
   );
 
-  const suggestions = (suggestionRows || []).map((row) => ({
-    id: row.id,
-    boardId: row.board_id,
-    boardGroupId: row.board_group_id,
-    suggestedBy: row.suggested_by,
-    nhlPlayerId: row.nhl_player_id,
-    playerName: row.player_name,
-    teamCode: row.team_code,
-    teamName: row.team_name,
-    reason: row.reason,
-    status: row.status,
-    createdAt: row.created_at,
-    groupLabel: row.board_groups?.label ?? "Group",
-    groupSortOrder: row.board_groups?.sort_order ?? 0,
-    displayName: profileMap.get(row.suggested_by)?.display_name || "Unknown",
-  }));
+  const statusSortOrder = {
+    pending: 0,
+    accepted: 1,
+    rejected: 2,
+  };
 
-  return res.json({ suggestions });
+  const suggestions = (suggestionRows || [])
+    .map((row) => ({
+      id: row.id,
+      boardId: row.board_id,
+      boardGroupId: row.board_group_id,
+      suggestedBy: row.suggested_by,
+      nhlPlayerId: row.nhl_player_id,
+      playerName: row.player_name,
+      teamCode: row.team_code,
+      teamName: row.team_name,
+      reason: row.reason,
+      status: row.status,
+      createdAt: row.created_at,
+      groupLabel: row.board_groups?.label ?? "Group",
+      groupSortOrder: row.board_groups?.sort_order ?? 0,
+      displayName: profileMap.get(row.suggested_by)?.display_name || "Unknown",
+    }))
+    .sort((a, b) => {
+      const statusDelta =
+        (statusSortOrder[a.status] ?? 99) - (statusSortOrder[b.status] ?? 99);
+      if (statusDelta !== 0) return statusDelta;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+
+  return res.json({
+    suggestions,
+    scope: isOwner ? "board" : "mine",
+    viewerRole: isOwner ? "owner" : "suggester",
+  });
 });
 
 router.post("/", requireSupabase, requireAuth, async (req, res) => {

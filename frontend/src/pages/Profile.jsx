@@ -121,17 +121,15 @@ export default function Profile({ session, onProfileUpdate, onAuthExit, isGuest 
 
   return (
     <div className="space-y-4">
-      <section className="glass-card rounded-3xl p-5">
-        <p className="text-[10px] uppercase tracking-[0.35em] text-[color:var(--muted)]">
-          Account
-        </p>
-        <div className="mt-2 flex items-center justify-between">
+      <section className="glass-card rounded-3xl p-5 md:p-6">
+        <p className="kicker">Account</p>
+        <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[conic-gradient(from_180deg,_#0ea5e9,_#22d3ee,_#f97316,_#0ea5e9)] text-sm font-semibold text-white">
+            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[linear-gradient(145deg,_#13356b,_#1f66ff)] text-sm font-semibold text-white">
               {initials || "HP"}
             </div>
             <div>
-              <div className="font-display text-2xl uppercase leading-none">
+              <div className="font-display text-3xl leading-none">
                 {displayName}
               </div>
               {email ? (
@@ -141,21 +139,21 @@ export default function Profile({ session, onProfileUpdate, onAuthExit, isGuest 
               ) : null}
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap sm:justify-end">
             {isEditing ? (
               <>
                 <button
                   type="submit"
                   form="profile-edit"
                   disabled={isSaving}
-                  className="rounded-full bg-[linear-gradient(135deg,_#0f172a,_#1d4ed8)] px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-white shadow-[0_12px_26px_rgba(15,23,42,0.25)] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="btn-primary rounded-full px-4 py-2 text-xs tracking-[0.08em]"
                 >
                   {isSaving ? "Saving..." : "Save"}
                 </button>
                 <button
                   type="button"
                   onClick={handleCancelEdit}
-                  className="rounded-full border border-white/70 bg-white/70 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)] shadow-sm hover:bg-white"
+                  className="btn-secondary rounded-full px-4 py-2 text-xs tracking-[0.08em]"
                 >
                   Cancel
                 </button>
@@ -165,14 +163,14 @@ export default function Profile({ session, onProfileUpdate, onAuthExit, isGuest 
                 <button
                   type="button"
                   onClick={handleEditToggle}
-                  className="rounded-full border border-white/70 bg-white/70 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)] shadow-sm hover:bg-white"
+                  className="btn-secondary rounded-full px-4 py-2 text-xs tracking-[0.08em]"
                 >
                   Edit
                 </button>
                 <button
                   type="button"
                   onClick={() => onAuthExit?.()}
-                  className="rounded-full border border-white/70 bg-white/70 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)] shadow-sm hover:bg-white"
+                  className="btn-secondary rounded-full px-4 py-2 text-xs tracking-[0.08em]"
                 >
                   {authActionLabel}
                 </button>
@@ -181,7 +179,7 @@ export default function Profile({ session, onProfileUpdate, onAuthExit, isGuest 
               <button
                 type="button"
                 onClick={() => onAuthExit?.()}
-                className="rounded-full border border-white/70 bg-white/70 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)] shadow-sm hover:bg-white"
+                className="btn-secondary rounded-full px-4 py-2 text-xs tracking-[0.08em]"
               >
                 {authActionLabel}
               </button>
@@ -197,7 +195,7 @@ export default function Profile({ session, onProfileUpdate, onAuthExit, isGuest 
         {isEditing ? (
           <form id="profile-edit" onSubmit={handleProfileSave} className="mt-4">
             <div className="space-y-2">
-              <label className="text-[10px] uppercase tracking-[0.28em] text-[color:var(--muted)]">
+              <label className="text-xs font-semibold tracking-[0.08em] text-[color:var(--muted)]">
                 Display name
               </label>
               <input
@@ -208,7 +206,7 @@ export default function Profile({ session, onProfileUpdate, onAuthExit, isGuest 
                     displayName: event.target.value,
                   }))
                 }
-                className="w-full rounded-2xl border border-white/80 bg-white/80 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-white/80"
+                className="field-input"
                 placeholder="Your name"
                 disabled={isSaving}
               />
@@ -232,12 +230,12 @@ export default function Profile({ session, onProfileUpdate, onAuthExit, isGuest 
         ) : null}
       </section>
 
-      <section className="glass-card rounded-3xl p-5 space-y-3">
+      <section className="glass-card rounded-3xl p-5 md:p-6 space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="font-display text-2xl uppercase">Stats</h2>
+          <h2 className="font-display text-3xl leading-none">Stats</h2>
           <span className="text-xs text-[color:var(--muted)]">Season</span>
         </div>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {[
             { label: "Wins", value: stats.wins },
             { label: "Streak", value: stats.streak },
@@ -245,12 +243,12 @@ export default function Profile({ session, onProfileUpdate, onAuthExit, isGuest 
           ].map((stat) => (
             <div
               key={stat.label}
-              className="rounded-2xl border border-white/80 bg-white/70 px-3 py-4 text-center"
+              className="surface-card rounded-2xl px-3 py-4 text-center"
             >
-              <div className="font-display text-2xl uppercase">
+              <div className="font-display text-3xl leading-none">
                 {stat.value}
               </div>
-              <div className="text-[10px] uppercase tracking-[0.25em] text-[color:var(--muted)]">
+              <div className="text-xs font-semibold tracking-[0.08em] text-[color:var(--muted)]">
                 {stat.label}
               </div>
             </div>

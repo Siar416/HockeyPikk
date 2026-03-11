@@ -170,26 +170,24 @@ export default function History({ session, onExitGuest }) {
   };
 
   const renderEmptyState = (message) => (
-    <div className="rounded-2xl border border-dashed border-white/80 bg-white/70 px-4 py-6 text-center text-sm text-[color:var(--muted)]">
+    <div className="empty-state">
       {message}
     </div>
   );
 
   return (
     <div className="space-y-4">
-      <section className="glass-card rounded-3xl p-5">
-        <p className="text-[10px] uppercase tracking-[0.35em] text-[color:var(--muted)]">
-          Archive
-        </p>
-        <h1 className="font-display text-3xl uppercase">History</h1>
+      <section className="glass-card rounded-3xl p-5 md:p-6">
+        <p className="kicker">Archive</p>
+        <h1 className="font-display text-4xl leading-none">History</h1>
         <p className="text-sm text-[color:var(--muted)]">
           Track past boards and how your picks performed.
         </p>
       </section>
 
-      <section className="glass-card rounded-3xl p-5 space-y-3">
+      <section className="glass-card rounded-3xl p-5 md:p-6 space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="font-display text-2xl uppercase">Recent Boards</h2>
+          <h2 className="font-display text-3xl leading-none">Recent boards</h2>
           <div className="flex flex-wrap items-center gap-2">
             {STATUS_FILTERS.map((filter) => {
               const isActive = statusFilter === filter.key;
@@ -199,7 +197,7 @@ export default function History({ session, onExitGuest }) {
                   type="button"
                   onClick={() => setStatusFilter(filter.key)}
                   className={[
-                    "rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] shadow-sm transition",
+                    "rounded-full border px-3 py-2 text-xs font-semibold tracking-[0.08em] shadow-sm transition",
                     isActive
                       ? "border-white/80 bg-white text-[color:var(--ink)]"
                       : "border-white/70 bg-white/70 text-[color:var(--muted)] hover:bg-white/90 hover:text-[color:var(--ink)]",
@@ -213,12 +211,12 @@ export default function History({ session, onExitGuest }) {
         </div>
 
         {!accessToken ? (
-          <div className="rounded-2xl border border-dashed border-white/80 bg-white/70 px-4 py-6 text-center text-sm text-[color:var(--muted)]">
+          <div className="empty-state">
             <div>Sign in to view your history.</div>
             <button
               type="button"
               onClick={handleSignIn}
-              className="mt-3 rounded-full border border-white/80 bg-white/90 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)] shadow-sm hover:bg-white"
+              className="btn-secondary mt-3 w-full rounded-full px-4 py-2 text-xs tracking-[0.08em] sm:w-auto"
             >
               Sign In
             </button>
@@ -229,7 +227,7 @@ export default function History({ session, onExitGuest }) {
             ? renderEmptyState(loadError)
             : filteredBoards.length === 0
               ? (
-                  <div className="rounded-2xl border border-dashed border-white/80 bg-white/70 px-4 py-6 text-center text-sm text-[color:var(--muted)]">
+                  <div className="empty-state">
                     <div>{emptyHistoryMessage}</div>
                     <div className="mt-2 text-xs text-[color:var(--muted)]">
                       {emptyHistoryHint}
@@ -237,7 +235,7 @@ export default function History({ session, onExitGuest }) {
                     <button
                       type="button"
                       onClick={handleStartToday}
-                      className="mt-3 rounded-full border border-white/80 bg-white/90 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)] shadow-sm hover:bg-white"
+                      className="btn-secondary mt-3 w-full rounded-full px-4 py-2 text-xs tracking-[0.08em] sm:w-auto"
                     >
                       Go to Today
                     </button>
@@ -287,7 +285,7 @@ export default function History({ session, onExitGuest }) {
                       return (
                         <div
                           key={board.id}
-                          className="rounded-2xl border border-white/80 bg-white/70 px-4 py-3"
+                          className="surface-card rounded-2xl px-4 py-3"
                         >
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div>
@@ -299,15 +297,15 @@ export default function History({ session, onExitGuest }) {
                               </div>
                             </div>
                             <div className="flex flex-col items-end gap-2">
-                              <span className="text-xs uppercase tracking-[0.25em] text-[color:var(--muted)]">
+                              <span className="text-xs font-semibold tracking-[0.08em] text-[color:var(--muted)]">
                                 {board.status === "locked" ? "Locked" : "Draft"}
                               </span>
-                              <span className="rounded-full border border-white/70 bg-white/80 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[color:var(--ink)]">
+                              <span className="chip">
                                 {summaryLabel}
                               </span>
                             </div>
                           </div>
-                          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[color:var(--muted)]">
+                          <div className="mt-3 flex flex-col gap-2 text-xs text-[color:var(--muted)] sm:flex-row sm:items-center sm:justify-between">
                             <span>{statusNote}</span>
                             <button
                               type="button"
@@ -316,7 +314,7 @@ export default function History({ session, onExitGuest }) {
                                   prev === board.id ? null : board.id
                                 )
                               }
-                              className="rounded-full border border-white/80 bg-white/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-[color:var(--ink)] shadow-sm"
+                              className="btn-secondary w-full rounded-full px-3 py-1 text-xs tracking-[0.08em] sm:w-auto"
                             >
                               {isExpanded ? "Hide picks" : "View picks"}
                             </button>
@@ -334,11 +332,11 @@ export default function History({ session, onExitGuest }) {
                                   return (
                                     <div
                                       key={pick.id}
-                                      className="rounded-2xl border border-white/80 bg-white/80 px-4 py-3"
+                                      className="surface-card rounded-2xl px-4 py-3"
                                     >
                                       <div className="flex flex-wrap items-center justify-between gap-3">
                                         <div>
-                                          <div className="text-[10px] uppercase tracking-[0.25em] text-[color:var(--muted)]">
+                                          <div className="text-xs font-semibold tracking-[0.08em] text-[color:var(--muted)]">
                                             {pick.board_groups?.label || "Group"}
                                           </div>
                                           <div className="text-sm font-semibold text-[color:var(--ink)]">
@@ -350,7 +348,7 @@ export default function History({ session, onExitGuest }) {
                                             </div>
                                           ) : null}
                                           {recordLabel ? (
-                                            <div className="mt-2 flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.22em] text-[color:var(--muted)]">
+                                            <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold tracking-[0.08em] text-[color:var(--muted)]">
                                               <span className="rounded-full border border-white/80 bg-white/80 px-2 py-1 shadow-sm">
                                                 H2H vs{" "}
                                                 {pick.opponent_team_code ||
@@ -365,7 +363,7 @@ export default function History({ session, onExitGuest }) {
                                         </div>
                                         <span
                                           className={[
-                                            "rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em]",
+                                            "rounded-full px-3 py-1 text-xs font-semibold tracking-[0.08em]",
                                             getGoalBadgeStyles(pick),
                                           ].join(" ")}
                                         >
@@ -387,7 +385,7 @@ export default function History({ session, onExitGuest }) {
                         onClick={() =>
                           setLimit((prev) => prev + HISTORY_PAGE_SIZE)
                         }
-                        className="w-full rounded-2xl border border-white/80 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-[color:var(--ink)] shadow-sm"
+                        className="w-full btn-secondary px-4 py-2 shadow-sm"
                       >
                         Show more
                       </button>
